@@ -1,4 +1,4 @@
-import { Effect, Match as M, Schema as S } from 'effect'
+import { Effect, Match, Schema } from 'effect'
 import { Command, Runtime, type Update } from 'foldkit'
 import { type Document, type Html, type HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
@@ -10,9 +10,9 @@ import { AppRoute, aboutRouter, homeRouter, urlToAppRoute } from './route'
 
 // MODEL
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   route: AppRoute,
-  count: S.Number,
+  count: Schema.Number,
 })
 export type Model = typeof Model.Type
 
@@ -37,14 +37,14 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = url => ({
 // COMMAND
 
 const NavigateInternal = Command.define('NavigateInternal', {
-  args: { url: S.String },
+  args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
   execute: ({ url }) =>
     pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 })
 
 const LoadExternal = Command.define('LoadExternal', {
-  args: { href: S.String },
+  args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
   execute: ({ href }) =>
     load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
@@ -53,7 +53,7 @@ const LoadExternal = Command.define('LoadExternal', {
 // UPDATE
 
 type UpdateReturn = Update.Return<Model, Message>
-const withUpdateReturn = M.withReturnType<UpdateReturn>()
+const withUpdateReturn = Match.withReturnType<UpdateReturn>()
 
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
@@ -61,9 +61,9 @@ export const update = (model: Model, message: Message) =>
       model: evo(model, { count: count => count + 1 }),
     }),
     ClickedLink: ({ request }) =>
-      M.value(request).pipe(
+      Match.value(request).pipe(
         withUpdateReturn,
-        M.tagsExhaustive({
+        Match.tagsExhaustive({
           Internal: ({ url }) => ({
             model,
             commands: [NavigateInternal({ url: urlToString(url) })],
@@ -84,8 +84,8 @@ export const update = (model: Model, message: Message) =>
 // VIEW
 
 const routeTitle = (route: AppRoute): string =>
-  M.value(route).pipe(
-    M.tagsExhaustive({
+  Match.value(route).pipe(
+    Match.tagsExhaustive({
       Home: () => 'Home | Static Generation | Foldkit',
       About: () => 'About | Static Generation | Foldkit',
       NotFound: () => 'Not Found | Static Generation | Foldkit',
@@ -102,8 +102,8 @@ const navigationView = (h: HtmlBuilder<Message>): Html =>
   )
 
 const pageView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  M.value(model.route).pipe(
-    M.tagsExhaustive({
+  Match.value(model.route).pipe(
+    Match.tagsExhaustive({
       Home: () =>
         h.section(
           [h.Class('grid gap-4')],

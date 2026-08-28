@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { Effect, Match as M, Option, Schema as S } from 'effect'
+import { Effect, Match, Option, Schema } from 'effect'
 import { Command, Runtime, Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
@@ -18,7 +18,7 @@ export { AppRoute } from './route'
 
 // MODEL
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   route: Route.AppRoute,
   counter: Counter.Model,
 })
@@ -45,14 +45,14 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = (
 // COMMAND
 
 const NavigateInternal = Command.define('NavigateInternal', {
-  args: { url: S.String },
+  args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
   execute: ({ url }) =>
     pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 })
 
 const LoadExternal = Command.define('LoadExternal', {
-  args: { href: S.String },
+  args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
   execute: ({ href }) =>
     load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
@@ -61,7 +61,7 @@ const LoadExternal = Command.define('LoadExternal', {
 // UPDATE
 
 type UpdateReturn = Update.Return<Model, Message>
-const withUpdateReturn = M.withReturnType<UpdateReturn>()
+const withUpdateReturn = Match.withReturnType<UpdateReturn>()
 
 const foldCounter = Update.foldChild({
   update: Counter.update,
@@ -73,9 +73,9 @@ const foldCounter = Update.foldChild({
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     ClickedLink: ({ request }) =>
-      M.value(request).pipe(
+      Match.value(request).pipe(
         withUpdateReturn,
-        M.tagsExhaustive({
+        Match.tagsExhaustive({
           Internal: ({ url }) => ({
             model,
             commands: [NavigateInternal({ url: urlToString(url) })],
@@ -321,8 +321,8 @@ const notFoundView = (path: string, h: HtmlBuilder<Message>): Html =>
   )
 
 const routeTitle = (route: Route.AppRoute): string =>
-  M.value(route).pipe(
-    M.tagsExhaustive({
+  Match.value(route).pipe(
+    Match.tagsExhaustive({
       Home: () => 'Devin Jameson',
       Posts: () => 'Posts | Devin Jameson',
       Post: ({ slug }) =>
@@ -335,8 +335,8 @@ const routeTitle = (route: Route.AppRoute): string =>
   )
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
-  const routeContent = M.value(model.route).pipe(
-    M.tagsExhaustive({
+  const routeContent = Match.value(model.route).pipe(
+    Match.tagsExhaustive({
       Home: () => homeView(model, h),
       Posts: () => postsView(h),
       Post: ({ slug }) => postView(slug, model, h),

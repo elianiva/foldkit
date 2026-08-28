@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { Array, Match as M, Option, pipe } from 'effect'
+import { Array, Match, Option, pipe } from 'effect'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 
 import { Button, Checkbox, Input, RadioGroup } from '@foldkit/ui'
@@ -37,8 +37,8 @@ const cancelButtonClassName =
   'cursor-pointer text-sm font-medium text-stone-600 underline decoration-stone-400 underline-offset-4 transition-colors hover:text-orange-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-stone-900'
 
 const stateEyebrow = (state: typeof CheckoutState.Type): string =>
-  M.value(state).pipe(
-    M.tagsExhaustive({
+  Match.value(state).pipe(
+    Match.tagsExhaustive({
       Cart: () => 'Bag',
       Shipping: () => 'Delivery',
       Payment: () => 'Payment',
@@ -50,8 +50,8 @@ const stateEyebrow = (state: typeof CheckoutState.Type): string =>
   )
 
 const stateTitle = (state: typeof CheckoutState.Type): string =>
-  M.value(state).pipe(
-    M.tagsExhaustive({
+  Match.value(state).pipe(
+    Match.tagsExhaustive({
       Cart: () => 'Your order',
       Shipping: () => 'Delivery details',
       Payment: () => 'Payment',
@@ -63,8 +63,8 @@ const stateTitle = (state: typeof CheckoutState.Type): string =>
   )
 
 const stateDescription = (state: typeof CheckoutState.Type): string =>
-  M.value(state).pipe(
-    M.tagsExhaustive({
+  Match.value(state).pipe(
+    Match.tagsExhaustive({
       Cart: () => 'Choose your edition before continuing to checkout.',
       Shipping: () => 'Confirm where we should send your hardcover.',
       Payment: () => 'Select a saved payment method for this order.',
@@ -85,15 +85,15 @@ const progressSteps: ReadonlyArray<string> = [
 const stateToMaybeProgressStep = (
   state: typeof CheckoutState.Type,
 ): Option.Option<string> =>
-  M.value(state).pipe(
-    M.tags({
+  Match.value(state).pipe(
+    Match.tags({
       Cart: () => 'Bag',
       Shipping: () => 'Delivery',
       Payment: () => 'Payment',
       Review: () => 'Review',
       Cancelled: () => 'Bag',
     }),
-    M.option,
+    Match.option,
   )
 
 const currentProgressIndex = (state: typeof CheckoutState.Type): number =>
@@ -145,13 +145,13 @@ const orderPricing = (
 const stateToMaybeDiscount = (
   state: typeof CheckoutState.Type,
 ): Option.Option<typeof Discount.Type> =>
-  M.value(state).pipe(
-    M.tags({
+  Match.value(state).pipe(
+    Match.tags({
       Review: reviewState => promoToMaybeDiscount(reviewState.promo),
       Placing: placingState => placingState.maybeDiscount,
       Confirmed: confirmedState => confirmedState.maybeDiscount,
     }),
-    M.option,
+    Match.option,
     Option.flatten,
   )
 
@@ -1039,8 +1039,8 @@ const reviewView = (
               ),
             ],
           ),
-          M.value(state.promo).pipe(
-            M.tagsExhaustive({
+          Match.value(state.promo).pipe(
+            Match.tagsExhaustive({
               NoPromo: () => h.p([h.Class(promoFeedbackClassName)], ['']),
               AppliedPromo: ({ discount }) =>
                 h.p(
@@ -1288,8 +1288,8 @@ const checkoutContentView = (
   editionRadioGroup: RadioGroup.Model,
   h: HtmlBuilder<Message>,
 ): Html =>
-  M.value(state).pipe(
-    M.tagsExhaustive({
+  Match.value(state).pipe(
+    Match.tagsExhaustive({
       Cart: cartState => cartView(cartState, editionRadioGroup, h),
       Shipping: () => shippingView(h),
       Payment: paymentState => paymentView(paymentState, h),

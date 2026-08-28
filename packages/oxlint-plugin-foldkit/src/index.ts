@@ -24,6 +24,7 @@ import { noNoopMessage } from './rules/no-noop-message.ts'
 import { noRawDomEventAttributes } from './rules/no-raw-dom-event-attributes.ts'
 import { noSpreadInEvo } from './rules/no-spread-in-evo.ts'
 import { preferCallableMessageConstructor } from './rules/prefer-callable-message-constructor.ts'
+import { preferEffectModuleNames } from './rules/prefer-effect-module-names.ts'
 import { requireRelForExternalLink } from './rules/require-rel-for-external-link.ts'
 import { selectionSubmodelFactoryAtModuleScope } from './rules/selection-submodel-factory-at-module-scope.ts'
 import { wrapChildOutputInGotMessage } from './rules/wrap-child-output-in-got-message.ts'
@@ -55,6 +56,7 @@ const basePlugin = Plugin.define({
     'no-noop-message': noNoopMessage,
     'no-raw-dom-event-attributes': noRawDomEventAttributes,
     'no-spread-in-evo': noSpreadInEvo,
+    'prefer-effect-module-names': preferEffectModuleNames,
     'prefer-callable-message-constructor': preferCallableMessageConstructor,
     'require-rel-for-external-link': requireRelForExternalLink,
     'selection-submodel-factory-at-module-scope':
@@ -96,18 +98,18 @@ const serverOverride: Override = {
   },
 }
 
-// Foldkit rules police application definitions. Tests exercise those
-// definitions rather than write them, so the rules are inert at best and
+const rulesApplicableToTests = new Set(['foldkit/prefer-effect-module-names'])
+
+// Most Foldkit rules police application definitions. Tests exercise those
+// definitions rather than write them, so those rules are inert at best and
 // invert at worst (a test may legitimately hardcode a route or hand-roll a
-// Command struct). Scope every foldkit rule off in test files by default; a
-// rule that wants test coverage opts in explicitly.
+// Command struct). Rules for syntax written directly in tests remain enabled.
 const testOverride = (config: Plugin.OxlintConfig): Override => ({
   files: testFilePatterns,
   rules: Object.fromEntries(
-    Object.keys(config.rules).map((id): [string, Plugin.RuleSeverity] => [
-      id,
-      'off',
-    ]),
+    Object.keys(config.rules)
+      .filter(id => !rulesApplicableToTests.has(id))
+      .map((id): [string, Plugin.RuleSeverity] => [id, 'off']),
   ),
 })
 

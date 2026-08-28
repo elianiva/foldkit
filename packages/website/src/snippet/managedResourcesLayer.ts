@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Option, Schema as S } from 'effect'
+import { Context, Effect, Layer, Option, Schema } from 'effect'
 import { ManagedResource } from 'foldkit'
 
 // A heavy engine whose init and teardown are packaged as an Effect Layer.
@@ -20,7 +20,7 @@ const Engine = ManagedResource.tag<ChessEngine>()('ChessEngine')
 //    Layer.build registers the Layer's finalizers on it. They tear down when
 //    the resource is released or re-acquired.
 const managedResources = ManagedResource.make<Model, Message>()(entry => ({
-  engine: entry(S.Option(S.Null), {
+  engine: entry(Schema.Option(Schema.Null), {
     resource: Engine,
     modelToMaybeRequirements: model => Option.as(model.maybeAnalysisSlug, null),
     acquire: () =>

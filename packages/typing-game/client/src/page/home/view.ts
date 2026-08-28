@@ -1,4 +1,4 @@
-import { Array, Match as M, Option } from 'effect'
+import { Array, Match, Option } from 'effect'
 import { Submodel } from 'foldkit'
 import { Html, HtmlBuilder } from 'foldkit/html'
 
@@ -13,8 +13,8 @@ import {
 } from './model'
 
 export const view = Submodel.defineView<Model, Message>((model, h): Html => {
-  const maybeUsername = M.value(model.homeStep).pipe(
-    M.tagsExhaustive({
+  const maybeUsername = Match.value(model.homeStep).pipe(
+    Match.tagsExhaustive({
       EnterUsername: () => Option.none(),
       SelectAction: ({ username }) => Option.some(username),
       EnterRoomId: ({ username }) => Option.some(username),
@@ -32,8 +32,8 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html => {
       h.h1([h.Class('mb-6 uppercase')], ['Typing Terminal']),
       welcomeText,
 
-      M.value(model.homeStep).pipe(
-        M.tagsExhaustive({
+      Match.value(model.homeStep).pipe(
+        Match.tagsExhaustive({
           EnterUsername: step => enterUsername(step, h),
           SelectAction: step => selectAction(step, h),
           EnterRoomId: step => enterRoomId(step, h),

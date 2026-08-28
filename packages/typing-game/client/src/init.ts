@@ -1,4 +1,4 @@
-import { Match as M } from 'effect'
+import { Match } from 'effect'
 import { Command, Runtime, type Update, Url } from 'foldkit'
 
 import { Message } from './message'
@@ -20,9 +20,9 @@ export const init: Runtime.RoutingApplicationInit<
   const homeInit = Home.init()
   const roomInit = Room.init(route)
 
-  const commands = M.value(route).pipe(
-    M.withReturnType<InitCommands>(),
-    M.tagsExhaustive({
+  const commands = Match.value(route).pipe(
+    Match.withReturnType<InitCommands>(),
+    Match.tagsExhaustive({
       Home: () =>
         Command.mapMessages(homeInit.commands, message =>
           Message.GotHomeMessage({ message }),

@@ -1,4 +1,4 @@
-import { Context, Effect, Schema as S } from 'effect'
+import { Context, Effect, Schema } from 'effect'
 import { expect } from 'vitest'
 
 import { describe, it } from '@effect/vitest'
@@ -34,22 +34,22 @@ const patch = init([
 ])
 
 const Message = defineMessageUnion({
-  RatingChanged: { value: S.Number },
+  RatingChanged: { value: Schema.Number },
   RatingCleared: {},
-  ToggledDisabled: { value: S.Boolean },
+  ToggledDisabled: { value: Schema.Boolean },
 })
 type Message = typeof Message.Type
 
 const emojiRating = CustomElement.define({
   tag: 'fk-emoji-rating',
   properties: {
-    value: S.Number,
-    disabled: S.Boolean,
-    label: S.String,
+    value: Schema.Number,
+    disabled: Schema.Boolean,
+    label: Schema.String,
   },
   events: {
-    'change-rating': S.Struct({ value: S.Number }),
-    'clear-rating': S.Struct({}),
+    'change-rating': Schema.Struct({ value: Schema.Number }),
+    'clear-rating': Schema.Struct({}),
   },
 })
 
@@ -204,7 +204,7 @@ describe('CustomElement.define validation', () => {
     expect(() =>
       CustomElement.define({
         tag: 'rating',
-        properties: { value: S.Number },
+        properties: { value: Schema.Number },
         events: {},
       }),
     ).toThrowError(/tag 'rating' is not a valid custom element name/)
@@ -234,8 +234,8 @@ describe('CustomElement.define validation', () => {
     expect(() =>
       CustomElement.define({
         tag: 'fk-collide',
-        properties: { onClick: S.Boolean },
-        events: { click: S.Struct({}) },
+        properties: { onClick: Schema.Boolean },
+        events: { click: Schema.Struct({}) },
       }),
     ).toThrowError(/factory name 'OnClick' is claimed/)
   })
@@ -245,8 +245,8 @@ describe('CustomElement.define validation', () => {
       CustomElement.define({
         tag: 'fk-collide',
         properties: {
-          value: S.Number,
-          Value: S.String,
+          value: Schema.Number,
+          Value: Schema.String,
         },
         events: {},
       }),
@@ -258,7 +258,7 @@ describe('CustomElement.define validation', () => {
       CustomElement.define({
         tag: 'fk-bad-event',
         properties: {},
-        events: { 'change--rating': S.Struct({}) },
+        events: { 'change--rating': Schema.Struct({}) },
       }),
     ).toThrowError(/event name 'change--rating' is not a valid kebab-case/)
   })
@@ -268,7 +268,7 @@ describe('CustomElement.define validation', () => {
       CustomElement.define({
         tag: 'fk-leading-hyphen',
         properties: {},
-        events: { '-change-rating': S.Struct({}) },
+        events: { '-change-rating': Schema.Struct({}) },
       }),
     ).toThrowError(/is not a valid kebab-case/)
 
@@ -276,7 +276,7 @@ describe('CustomElement.define validation', () => {
       CustomElement.define({
         tag: 'fk-trailing-hyphen',
         properties: {},
-        events: { 'change-rating-': S.Struct({}) },
+        events: { 'change-rating-': Schema.Struct({}) },
       }),
     ).toThrowError(/is not a valid kebab-case/)
   })
@@ -286,7 +286,7 @@ describe('CustomElement.define validation', () => {
       CustomElement.define({
         tag: 'fk-empty-event',
         properties: {},
-        events: { '': S.Struct({}) },
+        events: { '': Schema.Struct({}) },
       }),
     ).toThrowError(/is not a valid kebab-case/)
   })
@@ -295,7 +295,7 @@ describe('CustomElement.define validation', () => {
     expect(() =>
       CustomElement.define({
         tag: 'fk-bad-prop',
-        properties: { 'has-dash': S.String },
+        properties: { 'has-dash': Schema.String },
         events: {},
       }),
     ).toThrowError(/property name 'has-dash' is not a valid JS identifier/)
@@ -303,7 +303,7 @@ describe('CustomElement.define validation', () => {
     expect(() =>
       CustomElement.define({
         tag: 'fk-empty-prop',
-        properties: { '': S.String },
+        properties: { '': Schema.String },
         events: {},
       }),
     ).toThrowError(/is not a valid JS identifier/)
@@ -313,7 +313,9 @@ describe('CustomElement.define validation', () => {
     const spec = CustomElement.define({
       tag: 'fk-multi-segment',
       properties: {},
-      events: { 'change-rating-value': S.Struct({ value: S.Number }) },
+      events: {
+        'change-rating-value': Schema.Struct({ value: Schema.Number }),
+      },
     })
     const builder = spec.withMessage(__htmlBuilder<Message>())
     expect('OnChangeRatingValue' in builder).toBe(true)

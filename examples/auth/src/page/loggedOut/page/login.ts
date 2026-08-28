@@ -3,9 +3,9 @@ import {
   Array,
   Duration,
   Effect,
-  Match as M,
+  Match,
   Option,
-  Schema as S,
+  Schema,
   String,
   pipe,
 } from 'effect'
@@ -30,10 +30,10 @@ import { homeRouter } from '../../../route'
 
 // MODEL
 
-export const Model = S.Struct({
-  email: Field(S.String),
-  password: Field(S.String),
-  isSubmitting: S.Boolean,
+export const Model = Schema.Struct({
+  email: Field(Schema.String),
+  password: Field(Schema.String),
+  isSubmitting: Schema.Boolean,
 })
 
 export type Model = typeof Model.Type
@@ -47,11 +47,11 @@ export const initModel = (): Model => ({
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  ChangedEmail: { value: S.String },
-  ChangedPassword: { value: S.String },
+  ChangedEmail: { value: Schema.String },
+  ChangedPassword: { value: Schema.String },
   SubmittedForm: {},
   SucceededSimulateAuthRequest: { session: Session },
-  FailedSimulateAuthRequest: { error: S.String },
+  FailedSimulateAuthRequest: { error: Schema.String },
 })
 
 export type Message = typeof Message.Type
@@ -87,7 +87,7 @@ const isFormValid = (model: Model): boolean =>
 // UPDATE
 
 export const SimulateAuthRequest = Command.define('SimulateAuthRequest', {
-  args: { email: S.String, password: S.String },
+  args: { email: Schema.String, password: Schema.String },
   messages: [
     Message.SucceededSimulateAuthRequest,
     Message.FailedSimulateAuthRequest,
@@ -168,8 +168,8 @@ export const update = (model: Model, message: Message) =>
 // VIEW
 
 const fieldToBorderClass = (field: Field<string>) =>
-  M.value(field).pipe(
-    M.tagsExhaustive({
+  Match.value(field).pipe(
+    Match.tagsExhaustive({
       NotValidated: () => 'border-gray-300',
       Validating: () => 'border-blue-300',
       Valid: () => 'border-green-500',
@@ -213,8 +213,8 @@ const fieldView = (
                   ],
                   [labelText],
                 ),
-                M.value(field).pipe(
-                  M.tagsExhaustive({
+                Match.value(field).pipe(
+                  Match.tagsExhaustive({
                     NotValidated: () => h.empty,
                     Validating: () =>
                       h.span([h.Class('text-blue-600 text-sm')], ['...']),
@@ -226,8 +226,8 @@ const fieldView = (
               ],
             ),
             h.input([...attributes.input, h.Class(inputClass)]),
-            M.value(field).pipe(
-              M.tagsExhaustive({
+            Match.value(field).pipe(
+              Match.tagsExhaustive({
                 NotValidated: () => h.empty,
                 Validating: () => h.empty,
                 Valid: () => h.empty,

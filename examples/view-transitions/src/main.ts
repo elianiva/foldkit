@@ -1,4 +1,4 @@
-import { Array, Effect, Match as M, Option, Schema as S, String } from 'effect'
+import { Array, Effect, Match, Option, Schema, String } from 'effect'
 import { Command, Runtime, type Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
@@ -14,9 +14,9 @@ export { AppRoute } from './route'
 
 // MODEL
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   route: AppRoute,
-  filterText: S.String,
+  filterText: Schema.String,
 })
 export type Model = typeof Model.Type
 
@@ -27,7 +27,7 @@ export const Message = defineMessageUnion({
   CompletedLoadExternal: {},
   ClickedLink: { request: UrlRequest },
   ChangedUrl: { url: Url },
-  UpdatedFilterText: { filterText: S.String },
+  UpdatedFilterText: { filterText: Schema.String },
 })
 
 export type Message = typeof Message.Type
@@ -41,14 +41,14 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = (
 // COMMAND
 
 const NavigateInternal = Command.define('NavigateInternal', {
-  args: { url: S.String },
+  args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
   execute: ({ url }) =>
     pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 })
 
 const LoadExternal = Command.define('LoadExternal', {
-  args: { href: S.String },
+  args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
   execute: ({ href }) =>
     load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
@@ -57,7 +57,7 @@ const LoadExternal = Command.define('LoadExternal', {
 // UPDATE
 
 type UpdateReturn = Update.Return<Model, Message>
-const withUpdateReturn = M.withReturnType<UpdateReturn>()
+const withUpdateReturn = Match.withReturnType<UpdateReturn>()
 
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
@@ -65,9 +65,9 @@ export const update = (model: Model, message: Message) =>
     CompletedLoadExternal: () => ({ model }),
 
     ClickedLink: ({ request }) =>
-      M.value(request).pipe(
+      Match.value(request).pipe(
         withUpdateReturn,
-        M.tagsExhaustive({
+        Match.tagsExhaustive({
           Internal: ({ url }) => ({
             model,
             commands: [NavigateInternal({ url: urlToString(url) })],
@@ -105,9 +105,9 @@ export const viewTransition: Runtime.ViewTransitionConfig<Model, Message> = ({
 
   return Option.match(Transition.enteredAny(transition), {
     onNone: () => true,
-    onSome: M.type<AppRoute>().pipe(
-      M.withReturnType<Runtime.ViewTransitionDecision>(),
-      M.tagsExhaustive({
+    onSome: Match.type<AppRoute>().pipe(
+      Match.withReturnType<Runtime.ViewTransitionDecision>(),
+      Match.tagsExhaustive({
         Artwork: () => ({ types: ['to-artwork-detail'] }),
         Gallery: () => ({ types: ['to-gallery'] }),
         NotFound: () => true,
@@ -291,8 +291,8 @@ const notFoundView = (path: string, h: HtmlBuilder<Message>): Html =>
   )
 
 const routeTitle = (route: AppRoute): string =>
-  M.value(route).pipe(
-    M.tagsExhaustive({
+  Match.value(route).pipe(
+    Match.tagsExhaustive({
       Gallery: () => 'View Transitions',
       Artwork: ({ artworkId }) =>
         Option.match(findArtwork(artworkId), {
@@ -304,8 +304,8 @@ const routeTitle = (route: AppRoute): string =>
   )
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
-  const routeContent = M.value(model.route).pipe(
-    M.tagsExhaustive({
+  const routeContent = Match.value(model.route).pipe(
+    Match.tagsExhaustive({
       Gallery: () => galleryView(model.filterText, h),
       Artwork: ({ artworkId }) => artworkDetailView(artworkId, h),
       NotFound: ({ path }) => notFoundView(path, h),

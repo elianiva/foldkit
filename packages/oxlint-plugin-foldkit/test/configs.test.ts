@@ -18,6 +18,7 @@ const serverFilePatterns = [
 ]
 
 const serverRuleId = 'foldkit/no-nonportable-server-globals'
+const effectModuleNamesRuleId = 'foldkit/prefer-effect-module-names'
 
 const presets = [
   { name: 'recommended', config: plugin.configs.recommended },
@@ -37,6 +38,7 @@ describe('configs', () => {
           'error',
         )
         expect(config.rules['foldkit/got-submodel-message-name']).toBe('error')
+        expect(config.rules[effectModuleNamesRuleId]).toBe('error')
       })
 
       it('scopes the server portability rule to recognized server files', () => {
@@ -48,11 +50,14 @@ describe('configs', () => {
         expect(serverOverride?.rules).toEqual({ [serverRuleId]: 'error' })
       })
 
-      it('turns every foldkit rule off in test files', () => {
+      it('keeps syntax rules enabled while disabling application rules in test files', () => {
         const testOverride = config.overrides[1]
 
         expect(testOverride?.files).toEqual(testFilePatterns)
-        for (const ruleId of Object.keys(config.rules)) {
+        expect(testOverride?.rules[effectModuleNamesRuleId]).toBeUndefined()
+        for (const ruleId of Object.keys(config.rules).filter(
+          ruleId => ruleId !== effectModuleNamesRuleId,
+        )) {
           expect(testOverride?.rules[ruleId]).toBe('off')
         }
       })

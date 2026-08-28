@@ -1,13 +1,13 @@
 import clsx from 'clsx'
-import { Match as M } from 'effect'
+import { Match } from 'effect'
 import { type Field } from 'foldkit/fieldValidation'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
 import { Checkbox, Input, Textarea } from '@foldkit/ui'
 
 const borderClass = (field: Field<string>): string =>
-  M.value(field).pipe(
-    M.tagsExhaustive({
+  Match.value(field).pipe(
+    Match.tagsExhaustive({
       NotValidated: () => 'border-gray-300',
       Validating: () => 'border-blue-300',
       Valid: () => 'border-green-500',
@@ -51,17 +51,17 @@ export const inputField = <ParentMessage>(
                   ],
                   [config.label],
                 ),
-                ...M.value(config.field).pipe(
-                  M.tag('Validating', () => [
+                ...Match.value(config.field).pipe(
+                  Match.tag('Validating', () => [
                     h.span(
                       [h.Class('text-blue-600 text-sm animate-spin')],
                       ['◐'],
                     ),
                   ]),
-                  M.tag('Valid', () => [
+                  Match.tag('Valid', () => [
                     h.span([h.Class('text-green-600 text-sm')], ['✓']),
                   ]),
-                  M.orElse(() => []),
+                  Match.orElse(() => []),
                 ),
               ],
             ),

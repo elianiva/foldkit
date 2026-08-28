@@ -2,9 +2,9 @@ import {
   Array,
   Duration,
   Effect,
-  Match as M,
+  Match,
   Option,
-  Schema as S,
+  Schema,
   String,
   pipe,
 } from 'effect'
@@ -26,10 +26,10 @@ import {
 
 // DOMAIN
 
-const Person = S.Struct({
-  id: S.Number,
-  name: S.String,
-  role: S.String,
+const Person = Schema.Struct({
+  id: Schema.Number,
+  name: Schema.String,
+  role: Schema.String,
 })
 type Person = typeof Person.Type
 
@@ -84,13 +84,13 @@ export const findPerson = (id: number) =>
 
 export const SearchResults = defineTaggedUnion({
   Loading: {},
-  Loaded: { query: S.String, people: S.Array(Person) },
+  Loaded: { query: Schema.String, people: Schema.Array(Person) },
 })
 export type SearchResults = typeof SearchResults.Type
 
-export const Model = S.Struct({
-  searchInput: S.String,
-  searchHistory: S.Array(S.String),
+export const Model = Schema.Struct({
+  searchInput: Schema.String,
+  searchHistory: Schema.Array(Schema.String),
   results: SearchResults,
 })
 export type Model = typeof Model.Type
@@ -98,12 +98,12 @@ export type Model = typeof Model.Type
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  ChangedSearchInput: { value: S.String },
+  ChangedSearchInput: { value: Schema.String },
   SubmittedSearch: {},
   ChangedRoute: { route: AppRoute.People },
   SucceededFetchPeople: {
-    query: S.String,
-    people: S.Array(Person),
+    query: Schema.String,
+    people: Schema.Array(Person),
   },
   CompletedPushSearchUrl: {},
 })
@@ -129,7 +129,7 @@ export const init = (route: PeopleRoute): InitReturn => {
 // COMMAND
 
 export const PushSearchUrl = Command.define('PushSearchUrl', {
-  args: { searchText: S.Option(S.String) },
+  args: { searchText: Schema.Option(Schema.String) },
   messages: [Message.CompletedPushSearchUrl],
   execute: ({ searchText }) =>
     pushUrl(peopleRouter({ searchText })).pipe(
@@ -138,7 +138,7 @@ export const PushSearchUrl = Command.define('PushSearchUrl', {
 })
 
 export const FetchPeople = Command.define('FetchPeople', {
-  args: { searchText: S.String },
+  args: { searchText: Schema.String },
   messages: [Message.SucceededFetchPeople],
   execute: ({ searchText }) =>
     Effect.sleep(SEARCH_LATENCY).pipe(
@@ -203,10 +203,10 @@ export const informRouteChanged = (model: Model, route: PeopleRoute) =>
 // VIEW
 
 const statusText = (results: SearchResults): string =>
-  M.value(results).pipe(
-    M.withReturnType<string>(),
-    M.tag('Loading', () => 'Searching…'),
-    M.tag('Loaded', ({ query, people: found }) => {
+  Match.value(results).pipe(
+    Match.withReturnType<string>(),
+    Match.tag('Loading', () => 'Searching…'),
+    Match.tag('Loaded', ({ query, people: found }) => {
       if (String.isEmpty(query)) {
         return 'Click on any person to view their details:'
       }
@@ -215,7 +215,7 @@ const statusText = (results: SearchResults): string =>
       const noun = count === 1 ? 'result' : 'results'
       return `${count} ${noun} for “${query}”`
     }),
-    M.exhaustive,
+    Match.exhaustive,
   )
 
 const recentSearchesView = (
@@ -330,15 +330,15 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
         [statusText(model.results)],
       ),
 
-      M.value(model.results).pipe(
-        M.tag('Loading', () => h.empty),
-        M.tag('Loaded', ({ people: results }) =>
+      Match.value(model.results).pipe(
+        Match.tag('Loading', () => h.empty),
+        Match.tag('Loaded', ({ people: results }) =>
           h.ul(
             [h.Class('space-y-3')],
             Array.map(results, person => personListItemView(person, h)),
           ),
         ),
-        M.exhaustive,
+        Match.exhaustive,
       ),
     ],
   ),

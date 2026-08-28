@@ -3,12 +3,12 @@ import {
   Array,
   Duration,
   Effect,
-  Match as M,
+  Match,
   Number,
   Option,
   Result,
-  Schema as S,
-  String as Str,
+  Schema,
+  String,
   pipe,
 } from 'effect'
 import {
@@ -58,10 +58,10 @@ const NOTE_DURATION_RADIO_GROUP_ID = 'note-duration'
 
 // MODEL
 
-const Note = S.Literals(['A', 'B', 'C', 'D', 'E', 'F', 'G'])
+const Note = Schema.Literals(['A', 'B', 'C', 'D', 'E', 'F', 'G'])
 type Note = typeof Note.Type
 
-const NoteDuration = S.Literals(['Short', 'Medium', 'Long'])
+const NoteDuration = Schema.Literals(['Short', 'Medium', 'Long'])
 type NoteDuration = typeof NoteDuration.Type
 
 const NoteDurationRadioGroup = RadioGroup.create<NoteDuration>()
@@ -83,11 +83,14 @@ const noteInputRules = FieldValidation.makeRules({
 
 const PlaybackState = defineTaggedUnion({
   Idle: {},
-  Playing: { noteSequence: S.Array(Note), currentNoteIndex: S.Number },
-  Paused: { noteSequence: S.Array(Note), currentNoteIndex: S.Number },
+  Playing: {
+    noteSequence: Schema.Array(Note),
+    currentNoteIndex: Schema.Number,
+  },
+  Paused: { noteSequence: Schema.Array(Note), currentNoteIndex: Schema.Number },
 })
 
-const NoteHighlightPhase = S.Literals([
+const NoteHighlightPhase = Schema.Literals([
   'Idle',
   'PlayMessage',
   'PlayUpdate',
@@ -107,14 +110,14 @@ const AudioState = defineTaggedUnion({
 })
 type AudioState = typeof AudioState.Type
 
-export const Model = S.Struct({
-  noteInput: FieldValidation.Field(S.String),
+export const Model = Schema.Struct({
+  noteInput: FieldValidation.Field(Schema.String),
   noteDurationRadioGroup: RadioGroup.Model,
   noteDuration: NoteDuration,
   playbackState: PlaybackState,
   highlightPhase: NoteHighlightPhase,
-  generation: S.Number,
-  messageLog: S.Array(S.String),
+  generation: Schema.Number,
+  messageLog: Schema.Array(Schema.String),
   audio: AudioState,
 })
 
@@ -123,13 +126,13 @@ export type Model = typeof Model.Type
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  ChangedNoteInput: { value: S.String },
+  ChangedNoteInput: { value: Schema.String },
   GotNoteDurationMessage: { message: RadioGroup.Message },
   ClickedPlay: {},
   ClickedPause: {},
   ClickedStop: {},
-  CompletedPlayNote: { noteIndex: S.Number },
-  CompletedDelayAdvancePhase: { generation: S.Number },
+  CompletedPlayNote: { noteIndex: Schema.Number },
+  CompletedDelayAdvancePhase: { generation: Schema.Number },
   SucceededAcquireAudioContext: {},
   FailedAcquireAudioContext: {},
   ReleasedAudioContext: {},
@@ -145,7 +148,7 @@ const parseNotes = (value: string) =>
     value,
     Array.fromIterable,
     Array.filterMap(character => {
-      const decoded = S.decodeUnknownOption(Note)(character)
+      const decoded = Schema.decodeUnknownOption(Note)(character)
       return Option.match(decoded, {
         onNone: () => Result.failVoid,
         onSome: Result.succeed,
@@ -175,7 +178,7 @@ export const init = (): UpdateReturn => ({
 
 // UPDATE
 
-const withUpdateReturn = M.withReturnType<UpdateReturn>()
+const withUpdateReturn = Match.withReturnType<UpdateReturn>()
 
 const prependToLog =
   (entry: string) =>
@@ -183,7 +186,7 @@ const prependToLog =
     Array.take([entry, ...messageLog], MAX_LOG_ENTRIES)
 
 const DelayAdvancePhase = Command.define('DelayAdvancePhase', {
-  args: { generation: S.Number },
+  args: { generation: Schema.Number },
   messages: [Message.CompletedDelayAdvancePhase],
   execute: ({ generation }) =>
     Effect.sleep(PHASE_DURATION).pipe(
@@ -213,11 +216,11 @@ const enterNoteCommandPhase = (
   ],
 })
 
-const foldNoteDurationRadioGroupOutMessage = M.type<
+const foldNoteDurationRadioGroupOutMessage = Match.type<
   RadioGroup.OutMessage<NoteDuration>
 >().pipe(
-  M.withReturnType<Update.Step<Model, Message>>(),
-  M.tagsExhaustive({
+  Match.withReturnType<Update.Step<Model, Message>>(),
+  Match.tagsExhaustive({
     Selected:
       ({ value }) =>
       model => ({
@@ -241,8 +244,8 @@ const foldNoteDurationRadioGroup = Update.foldChild({
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     ChangedNoteInput: ({ value }) => {
-      const uppercased = Str.toUpperCase(value)
-      const fieldState = Str.isEmpty(uppercased)
+      const uppercased = String.toUpperCase(value)
+      const fieldState = String.isEmpty(uppercased)
         ? FieldValidation.NotValidated({ value: uppercased })
         : validateNoteInput(uppercased)
 
@@ -259,10 +262,10 @@ export const update = (model: Model, message: Message) =>
       foldNoteDurationRadioGroup(model, message),
 
     ClickedPlay: () =>
-      M.value(model.playbackState).pipe(
+      Match.value(model.playbackState).pipe(
         withUpdateReturn,
-        M.tag('Playing', () => ({ model })),
-        M.tag('Paused', ({ noteSequence, currentNoteIndex }) => {
+        Match.tag('Playing', () => ({ model })),
+        Match.tag('Paused', ({ noteSequence, currentNoteIndex }) => {
           const resumeIndex = currentNoteIndex + 1
 
           if (resumeIndex >= noteSequence.length) {
@@ -291,7 +294,7 @@ export const update = (model: Model, message: Message) =>
             commands: [DelayAdvancePhase({ generation: nextGeneration })],
           }
         }),
-        M.tag('Idle', () => {
+        Match.tag('Idle', () => {
           const noteSequence =
             model.noteInput._tag === 'Valid'
               ? parseNotes(model.noteInput.value)
@@ -317,13 +320,13 @@ export const update = (model: Model, message: Message) =>
             commands: [DelayAdvancePhase({ generation: nextGeneration })],
           }
         }),
-        M.exhaustive,
+        Match.exhaustive,
       ),
 
     ClickedPause: () =>
-      M.value(model.playbackState).pipe(
+      Match.value(model.playbackState).pipe(
         withUpdateReturn,
-        M.tag('Playing', ({ noteSequence, currentNoteIndex }) => {
+        Match.tag('Playing', ({ noteSequence, currentNoteIndex }) => {
           const nextGeneration = model.generation + 1
 
           return {
@@ -340,7 +343,7 @@ export const update = (model: Model, message: Message) =>
             commands: [DelayAdvancePhase({ generation: nextGeneration })],
           }
         }),
-        M.orElse(() => ({ model })),
+        Match.orElse(() => ({ model })),
       ),
 
     ClickedStop: () => ({
@@ -376,20 +379,20 @@ export const update = (model: Model, message: Message) =>
         return { model }
       }
 
-      return M.value(model.highlightPhase).pipe(
+      return Match.value(model.highlightPhase).pipe(
         withUpdateReturn,
-        M.when('PlayMessage', () => ({
+        Match.when('PlayMessage', () => ({
           model: evo(model, { highlightPhase: () => 'PlayUpdate' }),
           commands: [DelayAdvancePhase({ generation: generation })],
         })),
-        M.when('PauseMessage', () => ({
+        Match.when('PauseMessage', () => ({
           model: evo(model, { highlightPhase: () => 'Idle' }),
         })),
-        M.when('PlayUpdate', () => ({
+        Match.when('PlayUpdate', () => ({
           model: evo(model, { highlightPhase: () => 'PlayModel' }),
           commands: [DelayAdvancePhase({ generation: generation })],
         })),
-        M.when('PlayModel', () => {
+        Match.when('PlayModel', () => {
           if (model.playbackState._tag !== 'Playing') {
             return { model: evo(model, { highlightPhase: () => 'Idle' }) }
           }
@@ -398,15 +401,15 @@ export const update = (model: Model, message: Message) =>
 
           return enterNoteCommandPhase(model, noteSequence, currentNoteIndex)
         }),
-        M.when('NoteMessage', () => ({
+        Match.when('NoteMessage', () => ({
           model: evo(model, { highlightPhase: () => 'NoteUpdate' }),
           commands: [DelayAdvancePhase({ generation: generation })],
         })),
-        M.when('NoteUpdate', () => ({
+        Match.when('NoteUpdate', () => ({
           model: evo(model, { highlightPhase: () => 'NoteModel' }),
           commands: [DelayAdvancePhase({ generation: generation })],
         })),
-        M.when('NoteModel', () => {
+        Match.when('NoteModel', () => {
           if (model.playbackState._tag !== 'Playing') {
             return { model: evo(model, { highlightPhase: () => 'Idle' }) }
           }
@@ -425,8 +428,8 @@ export const update = (model: Model, message: Message) =>
 
           return enterNoteCommandPhase(model, noteSequence, nextIndex)
         }),
-        M.whenOr('Idle', 'NoteCommand', () => ({ model })),
-        M.exhaustive,
+        Match.whenOr('Idle', 'NoteCommand', () => ({ model })),
+        Match.exhaustive,
       )
     },
 
@@ -450,7 +453,7 @@ type AudioContextService = ManagedResource.ServiceOf<
 
 export const managedResources = ManagedResource.make<Model, Message>()(
   entry => ({
-    audioContext: entry(S.Option(S.Null), {
+    audioContext: entry(Schema.Option(Schema.Null), {
       resource: AudioContextResource,
       modelToMaybeRequirements: () => Option.some(null),
       acquire: () =>
@@ -471,7 +474,7 @@ export const managedResources = ManagedResource.make<Model, Message>()(
 // COMMAND
 
 const PlayNote = Command.define('PlayNote', {
-  args: { note: Note, duration: NoteDuration, noteIndex: S.Number },
+  args: { note: Note, duration: NoteDuration, noteIndex: Schema.Number },
   messages: [Message.CompletedPlayNote],
   execute: ({ note, duration, noteIndex }) =>
     Effect.gen(function* () {
@@ -532,8 +535,8 @@ const PlayNote = Command.define('PlayNote', {
 // VIEW
 
 const inputBorderClass = (field: FieldValidation.Field<string>): string =>
-  M.value(field).pipe(
-    M.tagsExhaustive({
+  Match.value(field).pipe(
+    Match.tagsExhaustive({
       NotValidated: () => 'border-gray-300 dark:border-gray-600',
       Validating: () => 'border-accent-300 dark:border-accent-600',
       Valid: () => 'border-gray-300 dark:border-gray-600',
@@ -645,8 +648,8 @@ const noteInputView = (
               h.Maxlength(MAX_NOTES),
               h.Autocomplete('off'),
             ]),
-            M.value(model.noteInput).pipe(
-              M.tagsExhaustive({
+            Match.value(model.noteInput).pipe(
+              Match.tagsExhaustive({
                 NotValidated: () =>
                   h.p(
                     [h.Class('text-xs text-gray-400 dark:text-gray-500')],
@@ -817,15 +820,15 @@ const playbackControlView = (
 }
 
 const audioUnavailableNoticeView = (audio: AudioState): ReadonlyArray<Html> =>
-  M.value(audio).pipe(
-    M.withReturnType<ReadonlyArray<Html>>(),
-    M.tag('Unavailable', () => [
+  Match.value(audio).pipe(
+    Match.withReturnType<ReadonlyArray<Html>>(),
+    Match.tag('Unavailable', () => [
       ih.p(
         [ih.Class('text-xs text-amber-600 dark:text-amber-500')],
         ['No audio output in this browser, so playback stays silent.'],
       ),
     ]),
-    M.orElse(() => []),
+    Match.orElse(() => []),
   )
 
 const placeholderVisualizerView = (): Html =>
@@ -863,12 +866,12 @@ const noteSequenceView = (model: Model): Html => {
 }
 
 const noteVisualizerView = (model: Model, notes: ReadonlyArray<Note>): Html => {
-  const maybeCurrentIndex = M.value(model.playbackState).pipe(
-    M.tag('Playing', 'Paused', ({ currentNoteIndex }) =>
+  const maybeCurrentIndex = Match.value(model.playbackState).pipe(
+    Match.tag('Playing', 'Paused', ({ currentNoteIndex }) =>
       Option.some(currentNoteIndex),
     ),
-    M.tag('Idle', () => Option.none()),
-    M.exhaustive,
+    Match.tag('Idle', () => Option.none()),
+    Match.exhaustive,
   )
 
   return ih.div(
@@ -902,8 +905,8 @@ const noteVisualizerView = (model: Model, notes: ReadonlyArray<Note>): Html => {
 }
 
 const noteInputLabel = (model: Model): string =>
-  M.value(model.noteInput).pipe(
-    M.tagsExhaustive({
+  Match.value(model.noteInput).pipe(
+    Match.tagsExhaustive({
       Valid: ({ value }) => `Valid("${value}")`,
       Invalid: ({ errors }) => `Invalid("${Array.headNonEmpty(errors)}")`,
       NotValidated: ({ value }) => `NotValidated("${value}")`,
@@ -912,52 +915,52 @@ const noteInputLabel = (model: Model): string =>
   )
 
 const playbackStateLabel = (model: Model): string =>
-  M.value(model.playbackState).pipe(
-    M.tag('Idle', () => 'Idle'),
-    M.tag(
+  Match.value(model.playbackState).pipe(
+    Match.tag('Idle', () => 'Idle'),
+    Match.tag(
       'Playing',
       ({ currentNoteIndex, noteSequence }) =>
         `PlaybackState.Playing(${currentNoteIndex + 1}/${noteSequence.length})`,
     ),
-    M.tag(
+    Match.tag(
       'Paused',
       ({ currentNoteIndex, noteSequence }) =>
         `PlaybackState.Paused(${currentNoteIndex + 1}/${noteSequence.length})`,
     ),
-    M.exhaustive,
+    Match.exhaustive,
   )
 
 const phaseLabel = (phase: NoteHighlightPhase): string =>
-  M.value(phase).pipe(
-    M.when('Idle', () => 'Idle'),
-    M.whenOr('PlayMessage', 'PauseMessage', 'NoteMessage', () => 'Message'),
-    M.whenOr('PlayUpdate', 'NoteUpdate', () => 'Update'),
-    M.whenOr('PlayModel', 'NoteModel', () => 'Model'),
-    M.when('NoteCommand', () => 'Command'),
-    M.exhaustive,
+  Match.value(phase).pipe(
+    Match.when('Idle', () => 'Idle'),
+    Match.whenOr('PlayMessage', 'PauseMessage', 'NoteMessage', () => 'Message'),
+    Match.whenOr('PlayUpdate', 'NoteUpdate', () => 'Update'),
+    Match.whenOr('PlayModel', 'NoteModel', () => 'Model'),
+    Match.when('NoteCommand', () => 'Command'),
+    Match.exhaustive,
   )
 
 const phaseColorClass = (phase: NoteHighlightPhase): string =>
-  M.value(phase).pipe(
-    M.when('Idle', () => 'text-gray-500 dark:text-gray-400'),
-    M.whenOr(
+  Match.value(phase).pipe(
+    Match.when('Idle', () => 'text-gray-500 dark:text-gray-400'),
+    Match.whenOr(
       'PlayMessage',
       'PauseMessage',
       'NoteMessage',
       () => 'text-emerald-600 dark:text-emerald-400',
     ),
-    M.whenOr(
+    Match.whenOr(
       'PlayUpdate',
       'NoteUpdate',
       () => 'text-amber-600 dark:text-amber-400',
     ),
-    M.whenOr(
+    Match.whenOr(
       'PlayModel',
       'NoteModel',
       () => 'text-accent-600 dark:text-accent-400',
     ),
-    M.when('NoteCommand', () => 'text-violet-600 dark:text-violet-400'),
-    M.exhaustive,
+    Match.when('NoteCommand', () => 'text-violet-600 dark:text-violet-400'),
+    Match.exhaustive,
   )
 
 const phaseIndicatorView = (model: Model): Html =>

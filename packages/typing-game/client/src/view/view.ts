@@ -1,4 +1,4 @@
-import { Match as M } from 'effect'
+import { Match } from 'effect'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 
 import { Message } from '../message'
@@ -7,8 +7,8 @@ import { Home, Room } from '../page'
 import { AppRoute } from '../route'
 
 const routeTitle = (route: Model['route']): string =>
-  M.value(route).pipe(
-    M.tagsExhaustive({
+  Match.value(route).pipe(
+    Match.tagsExhaustive({
       Home: () => 'Typing Game',
       Room: ({ roomId }) => `Room ${roomId} | Typing Game`,
       NotFound: () => 'Not Found | Typing Game',
@@ -16,8 +16,8 @@ const routeTitle = (route: Model['route']): string =>
   )
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
-  const content = M.value(model.route).pipe(
-    M.tagsExhaustive({
+  const content = Match.value(model.route).pipe(
+    Match.tagsExhaustive({
       Home: () =>
         h.submodel({
           slotId: 'home',

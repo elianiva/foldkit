@@ -1,4 +1,4 @@
-import { Match as M } from 'effect'
+import { Match } from 'effect'
 import type { ChildAttribute, Html, HtmlBuilder } from 'foldkit/html'
 
 import { Calendar } from '@foldkit/ui'
@@ -183,8 +183,8 @@ export const basicDemo = (model: Model, h: HtmlBuilder<Message>) => {
       view: Calendar.view,
       viewInputs: {
         maybeSelectedDate: model.maybeCalendarBasicDemoSelectedDate,
-        toView: M.type<Calendar.CalendarAttributes>().pipe(
-          M.tagsExhaustive({
+        toView: Match.type<Calendar.CalendarAttributes>().pipe(
+          Match.tagsExhaustive({
             Days: days => daysView(days, h),
             Months: months => monthsView(months, h),
             Years: years => yearsView(years, h),

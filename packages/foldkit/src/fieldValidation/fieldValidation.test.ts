@@ -1,4 +1,4 @@
-import { Option, Schema as S } from 'effect'
+import { Option, Schema } from 'effect'
 import { expect } from 'vitest'
 
 import { describe, it } from '@effect/vitest'
@@ -53,7 +53,7 @@ describe('state constructors', () => {
 
 describe('Field schema', () => {
   it('decodes each variant', () => {
-    const decoded = S.decodeUnknownOption(Field(S.String))({
+    const decoded = Schema.decodeUnknownOption(Field(Schema.String))({
       _tag: 'NotValidated',
       value: 'hi',
     })
@@ -61,7 +61,7 @@ describe('Field schema', () => {
   })
 
   it('rejects unknown tags', () => {
-    const decoded = S.decodeUnknownOption(Field(S.String))({
+    const decoded = Schema.decodeUnknownOption(Field(Schema.String))({
       _tag: 'Unknown',
       value: 'hi',
     })
@@ -69,7 +69,7 @@ describe('Field schema', () => {
   })
 
   it('decodes a non-string value field', () => {
-    const decoded = S.decodeUnknownOption(Field(S.Boolean))({
+    const decoded = Schema.decodeUnknownOption(Field(Schema.Boolean))({
       _tag: 'Valid',
       value: true,
     })

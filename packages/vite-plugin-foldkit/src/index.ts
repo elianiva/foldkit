@@ -8,13 +8,13 @@ import {
   Fiber,
   HashMap,
   HashSet,
-  Match as M,
+  Match,
   Option,
   Predicate,
   Queue,
   Ref,
-  Schema as S,
   Schedule,
+  Schema,
   Stream,
   pipe,
 } from 'effect'
@@ -230,14 +230,14 @@ const makeState = Effect.gen(function* () {
   return state
 })
 
-const encodeResponseFrameJson = S.encodeUnknownSync(
-  S.fromJsonString(ResponseFrame),
+const encodeResponseFrameJson = Schema.encodeUnknownSync(
+  Schema.fromJsonString(ResponseFrame),
 )
 
 // HANDLERS
 
 const handlePreserveModelReceived = (state: State, payload: unknown) =>
-  Exit.match(S.decodeUnknownExit(PreserveModelMessage)(payload), {
+  Exit.match(Schema.decodeUnknownExit(PreserveModelMessage)(payload), {
     onFailure: error =>
       Console.warn(
         '[foldkit:hmr] failed to decode preserve-model payload',
@@ -262,7 +262,7 @@ const handleRequestModelReceived = (
   state: State,
   payload: unknown,
 ) =>
-  Exit.match(S.decodeUnknownExit(RequestModelMessage)(payload), {
+  Exit.match(Schema.decodeUnknownExit(RequestModelMessage)(payload), {
     onFailure: error =>
       Console.warn(
         '[foldkit:hmr] failed to decode request-model payload',
@@ -275,7 +275,7 @@ const handleRequestModelReceived = (
           Effect.sync(() =>
             server.ws.send(
               'foldkit:restore-model',
-              S.encodeUnknownSync(RestoreModelMessage)(
+              Schema.encodeUnknownSync(RestoreModelMessage)(
                 RestoreModelMessage.make({ id, model }),
               ),
             ),
@@ -308,15 +308,15 @@ const handleBrowserEventFrameReceived = (
   data: unknown,
   client: WebSocketClient,
 ) =>
-  Exit.match(S.decodeUnknownExit(EventFrame)(data), {
+  Exit.match(Schema.decodeUnknownExit(EventFrame)(data), {
     onFailure: error =>
       Console.warn(
         '[foldkit:devTools] failed to decode browser event frame',
         error,
       ),
     onSuccess: frame =>
-      M.value(frame.event).pipe(
-        M.tagsExhaustive({
+      Match.value(frame.event).pipe(
+        Match.tagsExhaustive({
           EventConnected: event => handleConnectedEvent(state, event, client),
           EventDisconnected: event => handleDisconnectedEvent(state, event),
         }),
@@ -392,7 +392,7 @@ const handleViteClientClosed = (state: State, client: WebSocketClient) =>
   })
 
 const handleBrowserResponseFrameReceived = (state: State, data: unknown) =>
-  Exit.match(S.decodeUnknownExit(ResponseFrame)(data), {
+  Exit.match(Schema.decodeUnknownExit(ResponseFrame)(data), {
     onFailure: error =>
       Console.warn(
         '[foldkit:devTools] failed to decode browser response frame',
@@ -441,20 +441,23 @@ const handleMcpRequestReceived = (
   client: WebSocket,
   raw: string,
 ) =>
-  Exit.match(S.decodeUnknownExit(S.fromJsonString(RequestFrame))(raw), {
-    onFailure: error =>
-      Console.warn(
-        '[foldkit:devTools] failed to decode MCP request frame',
-        error,
-      ),
-    onSuccess: frame =>
-      M.value(frame.request).pipe(
-        M.tag('RequestListRuntimes', () =>
-          replyListRuntimes(state, client, frame.id),
+  Exit.match(
+    Schema.decodeUnknownExit(Schema.fromJsonString(RequestFrame))(raw),
+    {
+      onFailure: error =>
+        Console.warn(
+          '[foldkit:devTools] failed to decode MCP request frame',
+          error,
         ),
-        M.orElse(() => forwardRequestToBrowsers(server, frame)),
-      ),
-  })
+      onSuccess: frame =>
+        Match.value(frame.request).pipe(
+          Match.tag('RequestListRuntimes', () =>
+            replyListRuntimes(state, client, frame.id),
+          ),
+          Match.orElse(() => forwardRequestToBrowsers(server, frame)),
+        ),
+    },
+  )
 
 const replyListRuntimes = (
   state: State,
@@ -485,15 +488,15 @@ const forwardRequestToBrowsers = (
   Effect.sync(() =>
     server.ws.send(
       'foldkit:devTools:request',
-      S.encodeUnknownSync(RequestFrame)(frame),
+      Schema.encodeUnknownSync(RequestFrame)(frame),
     ),
   )
 
 // EVENT DISPATCH
 
 const dispatchEvent = (server: ViteDevServer, state: State, event: Event) =>
-  M.value(event).pipe(
-    M.tagsExhaustive({
+  Match.value(event).pipe(
+    Match.tagsExhaustive({
       PreserveModelReceived: ({ payload }) =>
         handlePreserveModelReceived(state, payload),
       RequestModelReceived: ({ payload }) =>

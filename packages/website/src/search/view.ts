@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { Array, Match as M, Option, String, pipe } from 'effect'
+import { Array, Match, Option, String, pipe } from 'effect'
 import { Submodel } from 'foldkit'
 import { Html, type HtmlBuilder, inertHtml as ih } from 'foldkit/html'
 
@@ -18,19 +18,19 @@ const handleSearchInputKeyDown = (
   key: string,
   model: Model,
 ): Option.Option<Message> =>
-  M.value(key).pipe(
-    M.when('ArrowDown', () =>
+  Match.value(key).pipe(
+    Match.when('ArrowDown', () =>
       Option.some(Message.PressedArrowKey({ direction: 'Down' })),
     ),
-    M.when('ArrowUp', () =>
+    Match.when('ArrowUp', () =>
       Option.some(Message.PressedArrowKey({ direction: 'Up' })),
     ),
-    M.when('Escape', () =>
+    Match.when('Escape', () =>
       String.isNonEmpty(model.query)
         ? Option.some(Message.ClearedSearchQuery())
         : Option.none(),
     ),
-    M.when('Enter', () =>
+    Match.when('Enter', () =>
       model.activeResultIndex >= 0
         ? pipe(
             model.searchState,
@@ -42,7 +42,7 @@ const handleSearchInputKeyDown = (
           )
         : Option.none(),
     ),
-    M.orElse(() => Option.none()),
+    Match.orElse(() => Option.none()),
   )
 
 const searchInputView = (model: Model, h: HtmlBuilder<Message>): Html => {
@@ -196,22 +196,22 @@ const resultListView = (
   })
 
 const resultsListView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  M.value(model.searchState).pipe(
-    M.withReturnType<Html>(),
-    M.tag('Idle', () => emptyPrompt),
-    M.tag('Loading', ({ results }) =>
+  Match.value(model.searchState).pipe(
+    Match.withReturnType<Html>(),
+    Match.tag('Idle', () => emptyPrompt),
+    Match.tag('Loading', ({ results }) =>
       Array.match(results, {
         onEmpty: () => searchingIndicator,
         onNonEmpty: () => resultListView(results, model.activeResultIndex, h),
       }),
     ),
-    M.tag('Ok', ({ results }) =>
+    Match.tag('Ok', ({ results }) =>
       Array.match(results, {
         onEmpty: () => noResultsView(model.query),
         onNonEmpty: () => resultListView(results, model.activeResultIndex, h),
       }),
     ),
-    M.exhaustive,
+    Match.exhaustive,
   )
 
 const resultCountAnnouncement = (model: Model): Html => {
