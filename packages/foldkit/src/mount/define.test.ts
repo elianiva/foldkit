@@ -22,14 +22,30 @@ const panelElement = (): Element => {
 const measuredWidth = (element: Element): number =>
   Number(element.getAttribute('data-width'))
 
-// NOTE: `if (false)` keeps this out of the run. The check is the
-// `@ts-expect-error` below: `pnpm typecheck` fails if declaring an args field
-// named `element` ever stops being an error at the definition site.
+// NOTE: `if (false)` keeps this out of the run. The checks are the
+// `@ts-expect-error` directives below: `pnpm typecheck` fails if declaring an
+// args field named `element` or `viewStateChanges` ever stops being an error at
+// the definition site.
 if (false) {
   Mount.define('MeasurePanel', {
     // @ts-expect-error `element` names the live element execute receives, so an arg cannot claim it
     args: {
       element: S.String,
+    },
+    messages: [Message.CompletedMeasurePanel],
+    execute: ({ element }) =>
+      Effect.succeed(
+        Message.CompletedMeasurePanel({
+          panelId: 'panel',
+          width: measuredWidth(element),
+        }),
+      ),
+  })
+
+  Mount.define('ObserveViewState', {
+    // @ts-expect-error `viewStateChanges` names the runtime Stream execute receives, so an arg cannot claim it
+    args: {
+      viewStateChanges: S.String,
     },
     messages: [Message.CompletedMeasurePanel],
     execute: ({ element }) =>

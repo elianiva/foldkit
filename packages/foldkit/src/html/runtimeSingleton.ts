@@ -1,5 +1,6 @@
-import type { Context } from 'effect'
+import { Context, Option } from 'effect'
 
+import { MountRuntime } from '../mount/index.js'
 import {
   type BoundaryId,
   type BoundaryRegistry,
@@ -118,6 +119,33 @@ export const requireDispatch = (): DispatchSync => {
   return getOrCreateBoundaryDispatch(
     frame.boundaryRegistry,
     frame.outerDispatch,
+    frame.boundaryId,
+  )
+}
+
+/** Returns the current boundary's dispatcher for Mount results. The runtime
+ *  supplies a live root dispatcher that drops results while a historical view
+ *  owns the DOM. Renderers without that service use the ordinary dispatcher. */
+export const requireMountDispatch = (): DispatchSync => {
+  const frame = stack[stack.length - 1]
+  if (frame === undefined) {
+    throw new Error(
+      'Foldkit: html element constructors must be called inside a runtime-driven ' +
+        'render. The element was built outside a view, or foldkit was loaded as ' +
+        'more than one instance (a bundler split foldkit and @foldkit/ui into ' +
+        'separate copies).',
+    )
+  }
+  const maybeMountRuntime = Context.getOption(
+    frame.runtimeContext,
+    MountRuntime,
+  )
+  const outerDispatch = Option.isSome(maybeMountRuntime)
+    ? maybeMountRuntime.value.dispatch
+    : frame.outerDispatch
+  return getOrCreateBoundaryDispatch(
+    frame.boundaryRegistry,
+    outerDispatch,
     frame.boundaryId,
   )
 }

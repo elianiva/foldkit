@@ -58,7 +58,7 @@ import type {
   ManagedResourceConfig,
   ManagedResources,
 } from '../managedResource/index.js'
-import { MountTracker } from '../mount/index.js'
+import { MountRuntime, MountTracker, type ViewState } from '../mount/index.js'
 import { UrlRequest } from '../navigation/urlRequest.js'
 import {
   type Inbound,
@@ -128,8 +128,8 @@ export type Visibility = 'Development' | 'Always'
 
 /** Controls DevTools interaction mode.
  *
- * - `'Inspect'`: Messages stream in and clicking a row shows its state snapshot without pausing the app.
- * - `'TimeTravel'`: Clicking a row pauses the app at that historical state. Resume to continue.
+ * - `'Inspect'`: Messages stream in and clicking a row shows its state snapshot without pausing the rendered view.
+ * - `'TimeTravel'`: Clicking a row installs a paused historical view while the live application continues. Resume to patch the latest live view.
  */
 export type DevToolsMode = 'Inspect' | 'TimeTravel'
 
@@ -137,7 +137,7 @@ export type DevToolsMode = 'Inspect' | 'TimeTravel'
  *  environment, or an object selecting different modes for development and
  *  production. Use the object form to keep `'TimeTravel'` for local debugging
  *  while shipping the safer `'Inspect'` mode to users. `'TimeTravel'` in
- *  production pauses the user's app when a history row is clicked. */
+ *  production pauses the user's rendered view when a history row is clicked. */
 export type DevToolsModeConfig =
   | DevToolsMode
   | Readonly<{ development: DevToolsMode; production: DevToolsMode }>
@@ -166,7 +166,7 @@ export type DevToolsOverlay = (
  *
  * - `show`: `'Development'` (default) enables in dev mode only, `'Always'` enables in all environments including production.
  * - `position`: Where the badge and panel appear. Defaults to `'BottomRight'`.
- * - `mode`: `'TimeTravel'` (default) enables full time-travel debugging. `'Inspect'` allows browsing state snapshots without pausing the app. Pass `{ development, production }` to use different modes per environment. Useful when DevTools is shown in production (`show: 'Always'`) and you want `'TimeTravel'` only in local development.
+ * - `mode`: `'TimeTravel'` (default) enables full time-travel debugging by installing a paused historical view while the live application continues. `'Inspect'` allows browsing state snapshots without replacing the live view. Pass `{ development, production }` to use different modes per environment. Useful when DevTools is shown in production (`show: 'Always'`) and you want `'TimeTravel'` only in local development.
  * - `banner`: Optional text shown as a banner at the top of the panel.
  * - `excludeFromHistory`: Message `_tag` values whose dispatches should not be recorded in DevTools history. The Messages still drive `update` and the runtime as usual; they just don't appear in the history panel and don't pay the per-Message diff cost. Use for high-frequency Messages (animation frames, pointer moves, scroll events) that would flood history without adding insight.
  * - `maxEntries`: Maximum number of recorded Messages retained in history before the oldest is evicted. Defaults to 100. Clamped to the range 20-500: smaller values keep the panel snappy under high message rates, larger values give you more scroll-back. Each retained entry stores a full Model snapshot, so memory cost scales linearly with both `maxEntries` and your Model size.
@@ -2375,6 +2375,18 @@ const makeRuntime = <
         const initModel = maybeFreezeModel(initModelRaw)
 
         const modelPubSub = yield* PubSub.unbounded<Model>()
+        let currentViewState: ViewState = 'Live'
+        const viewStatePubSub = yield* PubSub.unbounded<ViewState>({
+          replay: 1,
+        })
+        PubSub.publishUnsafe(viewStatePubSub, currentViewState)
+        const setViewState = (nextViewState: ViewState): void => {
+          if (nextViewState === currentViewState) {
+            return
+          }
+          currentViewState = nextViewState
+          PubSub.publishUnsafe(viewStatePubSub, nextViewState)
+        }
 
         if (import.meta.hot) {
           yield* Effect.addFinalizer(() =>
@@ -2533,6 +2545,15 @@ const makeRuntime = <
           enqueueMessageEffect(message as Message)
 
         const dispatch = { dispatchAsync, dispatchSync }
+
+        const mountRuntime = MountRuntime.of({
+          viewStateChanges: Stream.fromPubSub(viewStatePubSub),
+          dispatch: message => {
+            if (currentViewState === 'Live') {
+              dispatchSync(message)
+            }
+          },
+        })
 
         const isPausedNow = (): boolean =>
           devToolsStore !== null &&
@@ -2797,13 +2818,12 @@ const makeRuntime = <
         }
 
         // NOTE: `dispatchService` defaults to the live dispatch but is
-        // overridable so the DevTools jumpTo render path can pass
-        // `noOpDispatch`. Mount Effects forked during a replay render still
-        // execute (so the rendered DOM looks correct: positioning,
-        // observer attachment, library setup), but their result Messages
-        // reach a no-op dispatchSync and are never processed.
-        // This prevents mount-derived Messages from polluting history when
-        // the user is just inspecting past state.
+        // overridable so the time-travel render path can pass `noOpDispatch`
+        // for declarative handlers. Mounts route through `mountRuntime`
+        // instead. Its dispatcher remains attached to the live runtime but
+        // drops Mount Messages while a historical view owns the DOM, so a
+        // surviving Mount keeps its fiber and handle without changing the
+        // live Model from events produced by the paused DOM.
         const render = (
           model: Model,
           message: Option.Option<Message>,
@@ -2932,6 +2952,7 @@ const makeRuntime = <
             ),
             Effect.provideService(Dispatch, dispatchService),
             Effect.provideService(MountTracker, mountTracker),
+            Effect.provideService(MountRuntime, mountRuntime),
           )
 
         const isInIframe = window.self !== window.top
@@ -2974,25 +2995,37 @@ const makeRuntime = <
                 return maybeFreezeModel(replayUpdate.model)
               },
               /* eslint-enable @typescript-eslint/consistent-type-assertions */
-              // NOTE: passes `noOpDispatch` so mount Effects forked during
-              // the replay render dispatch their result Messages into a
-              // no-op (instead of enqueueing them as new history entries).
-              // Also discards mount events fired during the render so they
-              // don't get attributed to the next user-initiated dispatch.
+              // NOTE: passes `noOpDispatch` so declarative handlers built by
+              // the replay cannot reach the live Model. Mounts route through
+              // `mountRuntime`, whose view-state gate suppresses their
+              // Messages while leaving their fibers alive. Also discards
+              // mount events fired during the render so they don't get
+              // attributed to the next user-initiated dispatch.
               render: model =>
                 Effect.gen(function* () {
                   /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
                   const replayedModel = model as Model
+                  // NOTE: a Mount surviving from the live view must stop emitting
+                  // before the historical patch can expose different DOM.
+                  // Mounts inserted by that patch subscribe after this write,
+                  // so the replaying PubSub gives them `Paused` immediately.
+                  setViewState('Paused')
                   // NOTE: a transition still animating belongs to the live
                   // state this replay is about to paint over. Left running it
                   // animates a dead snapshot across the replayed DOM.
                   skipPendingViewTransition()
-                  yield* render(
-                    replayedModel,
-                    Option.none(),
-                    noOpDispatch,
-                    'Replay',
+                  const replayRenderExit = yield* Effect.exit(
+                    render(
+                      replayedModel,
+                      Option.none(),
+                      noOpDispatch,
+                      'Replay',
+                    ),
                   )
+                  if (Exit.isFailure(replayRenderExit)) {
+                    yield* crashWith(replayRenderExit.cause, Option.none())
+                    return yield* Effect.failCause(replayRenderExit.cause)
+                  }
                   drainMountEvents()
                   // NOTE: a replay paints a past Model, so it owns the DOM on
                   // screen until the next live frame. Leaving
@@ -3091,10 +3124,44 @@ const makeRuntime = <
         // the runtime.
         const runtimeContextForCommands = yield* Effect.context<never>()
         const liveRenderContext = Context.add(
-          Context.add(runtimeContextForCommands, Dispatch, dispatch),
-          MountTracker,
-          mountTracker,
+          Context.add(
+            Context.add(runtimeContextForCommands, Dispatch, dispatch),
+            MountTracker,
+            mountTracker,
+          ),
+          MountRuntime,
+          mountRuntime,
         )
+
+        const makeResumingRenderContext = () => {
+          const bufferedMountMessages: Array<unknown> = []
+          let isBufferingMountMessages = true
+          const resumingMountRuntime = MountRuntime.of({
+            viewStateChanges: mountRuntime.viewStateChanges,
+            dispatch: message => {
+              if (isBufferingMountMessages) {
+                bufferedMountMessages.push(message)
+              } else {
+                mountRuntime.dispatch(message)
+              }
+            },
+          })
+
+          return {
+            runtimeContext: Context.add(
+              liveRenderContext,
+              MountRuntime,
+              resumingMountRuntime,
+            ),
+            flushMountMessages: () => {
+              isBufferingMountMessages = false
+              for (const message of bufferedMountMessages) {
+                mountRuntime.dispatch(message)
+              }
+              bufferedMountMessages.length = 0
+            },
+          }
+        }
 
         // NOTE: the render, Mount drain, DevTools attribution, and
         // patch-time-buffer flush. Shared by the plain path (called directly)
@@ -3111,12 +3178,23 @@ const makeRuntime = <
           // it. What this frame painted is what the next transition animates
           // away from.
           const renderedModel = liveModel
+          const resumingRender =
+            currentViewState === 'Paused' ? makeResumingRenderContext() : null
           try {
-            renderSyncPlain(liveModel, maybeLastDirtyMessage)
+            renderSyncPlain(
+              liveModel,
+              maybeLastDirtyMessage,
+              resumingRender?.runtimeContext ?? liveRenderContext,
+            )
             // NOTE: after the patch, so a render that threw leaves this on the
             // Model still on screen, and before `drainPendingMessages` below,
             // whose handlers can advance `liveModel` again.
             lastRenderedModel = renderedModel
+            // NOTE: resume clears the store's pause flag before this frame. Keep
+            // Mounts paused through the patch itself, then reopen their
+            // dispatch and publish `Live` only once the live DOM is installed.
+            setViewState('Live')
+            resumingRender?.flushMountMessages()
             if (devToolsStore !== null) {
               const mountEvents = drainMountEvents()
               Effect.runFork(
@@ -3241,6 +3319,7 @@ const makeRuntime = <
         const renderSyncPlain = (
           model: Model,
           maybeMessage: Option.Option<Message>,
+          runtimeContext: Context.Context<never>,
         ): void => {
           const [nextDocument, maybeViewDuration] = measureSlowPhase(
             resolvedSlowView,
@@ -3248,7 +3327,7 @@ const makeRuntime = <
               beginHtmlRender(boundaryRegistry)
               setHtmlRuntime(
                 dispatch.dispatchSync,
-                liveRenderContext,
+                runtimeContext,
                 boundaryRegistry,
               )
               try {
