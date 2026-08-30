@@ -1,7 +1,6 @@
 import { Context, Effect, Layer, Option, Schema as S } from 'effect'
 import { ManagedResource } from 'foldkit'
 
-// A heavy engine whose init and teardown are packaged as an Effect Layer.
 interface ChessEngine {
   readonly bestMove: (fen: string) => Effect.Effect<string>
 }
@@ -11,7 +10,25 @@ class ChessEngineService extends Context.Service<
   ChessEngine
 >()('ChessEngineService') {}
 
-declare const engineLayer: Layer.Layer<ChessEngineService>
+declare const requestBestMove: (
+  worker: Worker,
+  fen: string,
+) => Effect.Effect<string>
+
+// A heavy engine whose init and teardown are packaged as an Effect Layer.
+// Building the Layer spawns the worker, and the finalizer registered by
+// acquireRelease terminates it.
+const engineLayer: Layer.Layer<ChessEngineService> = Layer.effect(
+  ChessEngineService,
+  Effect.gen(function* () {
+    const worker = yield* Effect.acquireRelease(
+      Effect.sync(() => new Worker('/chess-engine-worker.js')),
+      worker => Effect.sync(() => worker.terminate()),
+    )
+
+    return { bestMove: (fen: string) => requestBestMove(worker, fen) }
+  }),
+)
 
 // 1. The Managed Resource holds the bare service value, with no wrapper.
 const Engine = ManagedResource.tag<ChessEngine>()('ChessEngine')
