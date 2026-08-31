@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  MAX_LABEL_LENGTH,
-  TOTAL_FRAMES,
-  getLabelText,
-  updateOutlines,
-  updateScroll,
-} from './shared.js'
+import { MAX_LABEL_LENGTH, TOTAL_FRAMES } from './constants.js'
+import { getLabelText } from './labels.js'
+import { updateOutlines, updateScroll } from './model.js'
 import type { ActiveOutline, OutlineRect } from './types.js'
 
-describe('outline/shared', () => {
+describe('outline/model', () => {
   it('updateOutlines increments count and resets frame', () => {
     const map = new Map<string, ActiveOutline>()
     const rect: OutlineRect = {
@@ -23,7 +19,6 @@ describe('outline/shared', () => {
     updateOutlines(map, [rect])
     expect(map.get('a|b')?.count).toBe(1)
     expect(map.get('a|b')?.frame).toBe(0)
-    // second frame: bump count
     map.set('a|b', { ...map.get('a|b')!, frame: 5 })
     updateOutlines(map, [rect])
     expect(map.get('a|b')?.count).toBe(2)

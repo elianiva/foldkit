@@ -56,7 +56,7 @@ import * as Switch from '@foldkit/ui/switch'
 import * as Tabs from '@foldkit/ui/tabs'
 
 import * as OptionExt from './internal/optionExtensions.js'
-import { initOutlineCanvas, setOutlinesEnabled } from './outline/controller.js'
+import { type OutlineService, makeOutlineService } from './outline/index.js'
 import { overlayStyles } from './overlay-styles.js'
 
 const SubmodelFilterListbox = Listbox.create<string>()
@@ -576,6 +576,7 @@ const makeUpdate = (
   store: DevToolsStore,
   shadow: ShadowRoot,
   mode: DevToolsMode,
+  outline: OutlineService,
 ) => {
   const provideContext = <A, E>(
     effect: Effect.Effect<A, E, StoreService | ShadowRootService>,
@@ -635,7 +636,7 @@ const makeUpdate = (
         ],
       }),
       ToggledOutlines: ({ isOutlinesEnabled }) => {
-        setOutlinesEnabled(isOutlinesEnabled)
+        outline.setEnabled(isOutlinesEnabled)
         return {
           model: evo(model, { isOutlinesEnabled: () => isOutlinesEnabled }),
           commands: [
@@ -2697,11 +2698,7 @@ export const createOverlay = (
     const { isOutlinesEnabled: persistedIsOutlinesEnabled } =
       yield* readPersistedState
 
-    yield* Effect.acquireRelease(
-      Effect.sync(() => initOutlineCanvas(persistedIsOutlinesEnabled)),
-      cleanup => Effect.sync(cleanup),
-    )
-    setOutlinesEnabled(persistedIsOutlinesEnabled)
+    const outline = yield* makeOutlineService(persistedIsOutlinesEnabled)
 
     const flags: Effect.Effect<typeof Flags.Type> = Effect.gen(function* () {
       const storeState = yield* SubscriptionRef.get(store.stateRef)
@@ -2768,7 +2765,7 @@ export const createOverlay = (
       Flags,
       flags,
       init,
-      update: makeUpdate(store, shadow, mode),
+      update: makeUpdate(store, shadow, mode, outline),
       view: makeView(position, mode, shadow, maybeBanner),
       container,
       subscriptions: makeOverlaySubscriptions(store, shadow),
