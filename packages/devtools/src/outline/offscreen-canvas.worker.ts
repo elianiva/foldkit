@@ -1,33 +1,12 @@
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
 // oxlint-disable foldkit/no-module-level-mutable-state
-import { Match as M } from 'effect'
+import { Match } from 'effect'
 
 import { makeWorkerDrawLoop } from './drawLoop.js'
 import { clampedCanvasSize } from './geometry.js'
 import { updateOutlines, updateScroll } from './model.js'
+import type { WorkerWireMessage } from './protocol.js'
 import { drawFrame, initCanvas } from './render.js'
-import type { ActiveOutline, OutlineRect } from './types.js'
-
-type WorkerWireMessage =
-  | Readonly<{
-      type: 'init'
-      canvas: OffscreenCanvas
-      width: number
-      height: number
-      dpr: number
-    }>
-  | Readonly<{
-      type: 'draw-outlines'
-      rects: ReadonlyArray<OutlineRect>
-    }>
-  | Readonly<{ type: 'scroll'; deltaX: number; deltaY: number }>
-  | Readonly<{
-      type: 'resize'
-      width: number
-      height: number
-      dpr: number
-    }>
-  | Readonly<{ type: 'clear' }>
+import type { ActiveOutline } from './types.js'
 
 let canvas: OffscreenCanvas | null = null
 let ctx: OffscreenCanvasRenderingContext2D | null = null
@@ -48,15 +27,14 @@ const scheduleDraw = (): void => {
 }
 
 const handleWireMessage = (data: WorkerWireMessage): void => {
-  M.value(data).pipe(
-    M.discriminatorsExhaustive('type')({
+  Match.value(data).pipe(
+    Match.discriminatorsExhaustive('type')({
       init: message => {
         canvas = message.canvas
         dpr = message.dpr
         canvas.width = clampedCanvasSize(message.width, dpr)
         canvas.height = clampedCanvasSize(message.height, dpr)
-        const maybeCtx = initCanvas(canvas, dpr)
-        ctx = maybeCtx as OffscreenCanvasRenderingContext2D | null
+        ctx = initCanvas(canvas, dpr)
       },
       'draw-outlines': message => {
         updateOutlines(activeOutlines, message.rects)

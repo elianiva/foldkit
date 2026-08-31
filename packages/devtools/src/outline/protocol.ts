@@ -1,22 +1,4 @@
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
-import { Data, Match as M } from 'effect'
-
 import type { OutlineRect } from './types.js'
-
-export type WorkerCommand = Data.TaggedEnum<{
-  Init: {
-    canvas: OffscreenCanvas
-    width: number
-    height: number
-    dpr: number
-  }
-  DrawOutlines: { rects: ReadonlyArray<OutlineRect> }
-  Scroll: { deltaX: number; deltaY: number }
-  Resize: { width: number; height: number; dpr: number }
-  Clear: {}
-}>
-
-export const WorkerCommand = Data.taggedEnum<WorkerCommand>()
 
 export type WorkerWireMessage =
   | Readonly<{
@@ -44,44 +26,58 @@ export type WorkerWireEnvelope = Readonly<{
   transfer?: ReadonlyArray<Transferable>
 }>
 
-export const toWorkerWireEnvelope = (
-  command: WorkerCommand,
-): WorkerWireEnvelope =>
-  M.value(command).pipe(
-    M.tagsExhaustive({
-      Init: ({ canvas, width, height, dpr }) => ({
-        message: {
-          type: 'init',
-          canvas,
-          width,
-          height,
-          dpr,
-        } satisfies WorkerWireMessage,
-        transfer: [canvas as unknown as Transferable],
-      }),
-      DrawOutlines: ({ rects }) => ({
-        message: {
-          type: 'draw-outlines',
-          rects,
-        } satisfies WorkerWireMessage,
-      }),
-      Scroll: ({ deltaX, deltaY }) => ({
-        message: {
-          type: 'scroll',
-          deltaX,
-          deltaY,
-        } satisfies WorkerWireMessage,
-      }),
-      Resize: ({ width, height, dpr }) => ({
-        message: {
-          type: 'resize',
-          width,
-          height,
-          dpr,
-        } satisfies WorkerWireMessage,
-      }),
-      Clear: () => ({
-        message: { type: 'clear' } satisfies WorkerWireMessage,
-      }),
-    }),
-  )
+export const workerWireInit = (
+  canvas: OffscreenCanvas,
+  width: number,
+  height: number,
+  dpr: number,
+): WorkerWireEnvelope => {
+  const transfer: ReadonlyArray<Transferable> = [canvas]
+  return {
+    message: {
+      type: 'init',
+      canvas,
+      width,
+      height,
+      dpr,
+    },
+    transfer,
+  }
+}
+
+export const workerWireDrawOutlines = (
+  rects: ReadonlyArray<OutlineRect>,
+): WorkerWireEnvelope => ({
+  message: {
+    type: 'draw-outlines',
+    rects,
+  },
+})
+
+export const workerWireScroll = (
+  deltaX: number,
+  deltaY: number,
+): WorkerWireEnvelope => ({
+  message: {
+    type: 'scroll',
+    deltaX,
+    deltaY,
+  },
+})
+
+export const workerWireResize = (
+  width: number,
+  height: number,
+  dpr: number,
+): WorkerWireEnvelope => ({
+  message: {
+    type: 'resize',
+    width,
+    height,
+    dpr,
+  },
+})
+
+export const workerWireClear = (): WorkerWireEnvelope => ({
+  message: { type: 'clear' },
+})

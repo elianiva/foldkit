@@ -35,7 +35,11 @@ import {
   createDevToolsStore,
 } from '../devTools/store.js'
 import { startWebSocketBridge } from '../devTools/webSocketBridge.js'
-import { drainOutlines, drainPatchOutlines } from '../html/boundary.js'
+import {
+  drainOutlines,
+  drainPatchOutlines,
+  shouldRecordOutline,
+} from '../html/boundary.js'
 import {
   type BoundaryRegistry,
   Document,
@@ -62,6 +66,7 @@ import type {
 } from '../managedResource/index.js'
 import { MountTracker } from '../mount/index.js'
 import { UrlRequest } from '../navigation/urlRequest.js'
+import { OUTLINE_CUSTOM_EVENT, type OutlineRect } from '../outline/public.js'
 import {
   type Inbound,
   type Outbound,
@@ -3136,8 +3141,7 @@ const makeRuntime = <
               const explicit = drainOutlines(boundaryRegistry)
               const patched = drainPatchOutlines(boundaryRegistry)
               const isOutlineEnabled =
-                typeof window !== 'undefined' &&
-                Reflect.get(window, OUTLINE_ENABLED_KEY) === true &&
+                shouldRecordOutline() &&
                 runtimeId !== DEVTOOLS_OVERLAY_RUNTIME_ID
               if (isOutlineEnabled) {
                 const getTag = (value: unknown): string | undefined => {
@@ -3159,15 +3163,7 @@ const makeRuntime = <
                   onNone: () => undefined,
                   onSome: getTag,
                 })
-                const rects: Array<{
-                  id: string
-                  label: string
-                  x: number
-                  y: number
-                  width: number
-                  height: number
-                  cause?: string
-                }> = []
+                const rects: Array<OutlineRect> = []
                 const all =
                   explicit.length !== 0
                     ? patched.length !== 0
@@ -3250,7 +3246,7 @@ const makeRuntime = <
                 }
                 if (rects.length > 0) {
                   window.dispatchEvent(
-                    new CustomEvent('foldkit:outline', { detail: rects }),
+                    new CustomEvent(OUTLINE_CUSTOM_EVENT, { detail: rects }),
                   )
                 }
               }
@@ -3729,8 +3725,6 @@ const makeRuntime = <
 // multi-Message bursts ever reach the check; the single-Message path never
 // reads the clock beyond the drain start.
 const DRAIN_BUDGET_MS = 5
-
-const OUTLINE_ENABLED_KEY = '__foldkitOutlinesEnabled'
 
 /** Mutable holder for the vnode tree currently mounted in the container.
  *  The render frame writes it after every patch; the dispose finalizer, the

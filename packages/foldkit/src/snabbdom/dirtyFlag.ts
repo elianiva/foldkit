@@ -1,10 +1,8 @@
-const OUTLINE_ENABLED_KEY = '__foldkitOutlinesEnabled'
+import { isOutlineRecordingEnabled } from '../outline/public.js'
+
+export { isOutlineRecordingEnabled }
 
 const stack: Array<boolean> = []
-
-export const isOutlineRecordingEnabled = (): boolean =>
-  typeof window !== 'undefined' &&
-  Reflect.get(window, OUTLINE_ENABLED_KEY) === true
 
 export const beginDirty = (): void => {
   if (!isOutlineRecordingEnabled()) {

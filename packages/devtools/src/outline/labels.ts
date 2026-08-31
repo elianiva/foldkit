@@ -1,3 +1,5 @@
+import { Array, Option } from 'effect'
+
 import { MAX_LABEL_LENGTH, TOTAL_FRAMES } from './constants.js'
 import type { ActiveOutline } from './types.js'
 
@@ -57,7 +59,11 @@ export const buildLabels = (
   }
   const labels: Array<OutlineLabel> = []
   for (const outlines of groupedByLabel.values()) {
-    const first = outlines[0]!
+    const maybeFirst = Array.head(outlines)
+    if (Option.isNone(maybeFirst)) {
+      continue
+    }
+    const first = maybeFirst.value
     const alpha = 1 - first.frame / TOTAL_FRAMES
     const text = getLabelText(outlines)
     const { width } = ctx.measureText(text)
@@ -97,12 +103,20 @@ export const mergeOverlappingLabels = (
     if (removed.has(index)) {
       continue
     }
-    let current = labels[index]!
+    const labelAtIndex = Array.get(labels, index)
+    if (Option.isNone(labelAtIndex)) {
+      continue
+    }
+    let current = labelAtIndex.value
     for (let otherIndex = index + 1; otherIndex < labels.length; otherIndex++) {
       if (removed.has(otherIndex)) {
         continue
       }
-      const other = labels[otherIndex]!
+      const maybeOther = Array.get(labels, otherIndex)
+      if (Option.isNone(maybeOther)) {
+        continue
+      }
+      const other = maybeOther.value
       const overlap =
         current.x + current.width > other.x &&
         other.x + other.width > current.x &&

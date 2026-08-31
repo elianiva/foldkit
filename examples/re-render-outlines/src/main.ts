@@ -1,4 +1,4 @@
-import { Array, Schema as S } from 'effect'
+import { Array, Option, Schema } from 'effect'
 import { Runtime, Subscription, Update } from 'foldkit'
 import { Submodel } from 'foldkit'
 import {
@@ -11,30 +11,30 @@ import {
 import { defineMessageUnion } from 'foldkit/message'
 import { evo } from 'foldkit/struct'
 
-const Item = S.Struct({
-  id: S.String,
-  label: S.String,
-  value: S.Number,
+const Item = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  value: Schema.Number,
 })
 type Item = typeof Item.Type
 
 // MODEL
 
-export const Model = S.Struct({
-  isMemoized: S.Boolean,
-  tick: S.Number,
-  counter: S.Number,
-  items: S.Array(Item),
+export const Model = Schema.Struct({
+  isMemoized: Schema.Boolean,
+  tick: Schema.Number,
+  counter: Schema.Number,
+  items: Schema.Array(Item),
 })
 export type Model = typeof Model.Type
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  ToggledMemoization: { isMemoized: S.Boolean },
+  ToggledMemoization: { isMemoized: Schema.Boolean },
   IncrementedTick: {},
   IncrementedCounter: {},
-  IncrementedItem: { id: S.String },
+  IncrementedItem: { id: Schema.String },
   AddedItem: {},
   ShuffledItems: {},
 })
@@ -47,6 +47,25 @@ const initialItems: ReadonlyArray<Item> = [
   { id: 'item-4', label: 'Item 4', value: 0 },
   { id: 'item-5', label: 'Item 5', value: 0 },
 ]
+
+const shuffleItemsWithSeed = (
+  items: ReadonlyArray<Item>,
+  seed: number,
+): Array<Item> => {
+  const shuffled = [...items]
+  let state = seed
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    state = (state * 1103515245 + 12345) & 0x7fffffff
+    const swapIndex = state % (index + 1)
+    const atIndex = Array.get(shuffled, index)
+    const atSwap = Array.get(shuffled, swapIndex)
+    if (Option.isSome(atIndex) && Option.isSome(atSwap)) {
+      shuffled[index] = atSwap.value
+      shuffled[swapIndex] = atIndex.value
+    }
+  }
+  return shuffled
+}
 
 // UPDATE
 
@@ -88,7 +107,7 @@ export const update = (model: Model, message: Message) =>
     },
     ShuffledItems: () => ({
       model: evo(model, {
-        items: items => [...items].sort(() => Math.random() - 0.5),
+        items: items => shuffleItemsWithSeed(items, model.tick + model.counter),
       }),
     }),
   })
@@ -156,10 +175,10 @@ const counterCardContent = (
     ],
   )
 
-const CounterModelSchema = S.Struct({
-  tick: S.Number,
-  counter: S.Number,
-  isMemoized: S.Boolean,
+const CounterModelSchema = Schema.Struct({
+  tick: Schema.Number,
+  counter: Schema.Number,
+  isMemoized: Schema.Boolean,
 })
 type CounterModel = typeof CounterModelSchema.Type
 
@@ -263,14 +282,14 @@ const heavyRowBody = (item: Item, h: HtmlBuilder<ListMessage>): Html =>
 const itemRowView = (item: Item, h: HtmlBuilder<ListMessage>): Html =>
   h.keyed('li')(item.id, [h.Class('grid gap-1')], [heavyRowBody(item, h)])
 
-const ListModelSchema = S.Struct({
-  items: S.Array(Item),
-  isMemoized: S.Boolean,
+const ListModelSchema = Schema.Struct({
+  items: Schema.Array(Item),
+  isMemoized: Schema.Boolean,
 })
 type ListModel = typeof ListModelSchema.Type
 
 const ListMessage = defineMessageUnion({
-  IncrementedItem: { id: S.String },
+  IncrementedItem: { id: Schema.String },
 })
 type ListMessage = typeof ListMessage.Type
 

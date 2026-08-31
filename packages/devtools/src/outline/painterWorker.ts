@@ -1,7 +1,15 @@
 import { Data, Effect } from 'effect'
 
 import type { OutlinePainter } from './painter.js'
-import { WorkerCommand, toWorkerWireEnvelope } from './protocol.js'
+import type { CanvasHolder } from './painterMain.js'
+import {
+  type WorkerWireEnvelope,
+  workerWireClear,
+  workerWireDrawOutlines,
+  workerWireInit,
+  workerWireResize,
+  workerWireScroll,
+} from './protocol.js'
 import type { OutlineRect } from './types.js'
 
 declare global {
@@ -24,10 +32,9 @@ const devWarn = (...args: Array<unknown>): void => {
 
 const postWorkerEnvelope = (
   worker: Worker,
-  command: WorkerCommand,
-): Effect.Effect<void, OutlineWorkerUnavailable> => {
-  const envelope = toWorkerWireEnvelope(command)
-  return Effect.try({
+  envelope: WorkerWireEnvelope,
+): Effect.Effect<void, OutlineWorkerUnavailable> =>
+  Effect.try({
     try: () => {
       if (envelope.transfer !== undefined) {
         worker.postMessage(envelope.message, {
@@ -39,9 +46,18 @@ const postWorkerEnvelope = (
     },
     catch: error => new OutlineWorkerUnavailable({ reason: String(error) }),
   })
+
+const postEnvelope = (worker: Worker, envelope: WorkerWireEnvelope): void => {
+  if (envelope.transfer !== undefined) {
+    worker.postMessage(envelope.message, {
+      transfer: [...envelope.transfer],
+    })
+  } else {
+    worker.postMessage(envelope.message)
+  }
 }
 
-export const acquireWorkerPainter = (canvas: HTMLCanvasElement, dpr: number) =>
+export const acquireWorkerPainter = (canvasHolder: CanvasHolder, dpr: number) =>
   Effect.gen(function* () {
     if (
       typeof OffscreenCanvas === 'undefined' ||
@@ -64,7 +80,7 @@ export const acquireWorkerPainter = (canvas: HTMLCanvasElement, dpr: number) =>
     }).pipe(Effect.tapError(error => Effect.sync(() => devWarn(error.reason))))
 
     const offscreen = yield* Effect.try({
-      try: () => canvas.transferControlToOffscreen(),
+      try: () => canvasHolder.el.transferControlToOffscreen(),
       catch: error => {
         worker.terminate()
         return new OutlineWorkerUnavailable({
@@ -75,42 +91,28 @@ export const acquireWorkerPainter = (canvas: HTMLCanvasElement, dpr: number) =>
 
     yield* postWorkerEnvelope(
       worker,
-      WorkerCommand.Init({
-        canvas: offscreen,
-        width: window.innerWidth,
-        height: window.innerHeight,
-        dpr,
-      }),
+      workerWireInit(offscreen, window.innerWidth, window.innerHeight, dpr),
     ).pipe(
       Effect.tapError(() => Effect.sync(() => worker.terminate())),
       Effect.tapError(error => Effect.sync(() => devWarn(error.reason))),
     )
 
-    const postCommand = (command: WorkerCommand): void => {
-      const envelope = toWorkerWireEnvelope(command)
-      if (envelope.transfer !== undefined) {
-        worker.postMessage(envelope.message, {
-          transfer: [...envelope.transfer],
-        })
-      } else {
-        worker.postMessage(envelope.message)
-      }
-    }
+    const canvas = canvasHolder.el
 
     const painter: OutlinePainter = {
       pushRects: (rects: ReadonlyArray<OutlineRect>) =>
-        postCommand(WorkerCommand.DrawOutlines({ rects })),
+        postEnvelope(worker, workerWireDrawOutlines(rects)),
       applyScroll: (deltaX, deltaY) =>
-        postCommand(WorkerCommand.Scroll({ deltaX, deltaY })),
+        postEnvelope(worker, workerWireScroll(deltaX, deltaY)),
       resize: (width, height, nextDpr) => {
         canvas.style.width = `${width}px`
         canvas.style.height = `${height}px`
-        postCommand(WorkerCommand.Resize({ width, height, dpr: nextDpr }))
+        postEnvelope(worker, workerWireResize(width, height, nextDpr))
       },
       setVisible: visible => {
         canvas.style.display = visible ? 'block' : 'none'
       },
-      clear: () => postCommand(WorkerCommand.Clear()),
+      clear: () => postEnvelope(worker, workerWireClear()),
     }
 
     yield* Effect.addFinalizer(() =>

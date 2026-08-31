@@ -1,8 +1,9 @@
 import { Effect, Queue, Stream } from 'effect'
+import { OUTLINE_CUSTOM_EVENT, type OutlineRect } from 'foldkit/outline'
 
 import { OutlineCommand } from './commands.js'
 import { SCROLL_THROTTLE_MS } from './constants.js'
-import type { ActiveOutline, OutlineRect } from './types.js'
+import { getDpr } from './geometry.js'
 
 const isOutlineRectBatch = (
   detail: unknown,
@@ -12,12 +13,12 @@ const isOutlineRectBatch = (
     item =>
       typeof item === 'object' &&
       item !== null &&
-      'id' in item &&
-      'label' in item &&
-      'x' in item &&
-      'y' in item &&
-      'width' in item &&
-      'height' in item,
+      typeof Reflect.get(item, 'id') === 'string' &&
+      typeof Reflect.get(item, 'label') === 'string' &&
+      typeof Reflect.get(item, 'x') === 'number' &&
+      typeof Reflect.get(item, 'y') === 'number' &&
+      typeof Reflect.get(item, 'width') === 'number' &&
+      typeof Reflect.get(item, 'height') === 'number',
   )
 
 export const outlineBatchStream = Stream.callback<ReadonlyArray<OutlineRect>>(
@@ -34,12 +35,12 @@ export const outlineBatchStream = Stream.callback<ReadonlyArray<OutlineRect>>(
           }
           Queue.offerUnsafe(queue, detail)
         }
-        window.addEventListener('foldkit:outline', onOutline)
+        window.addEventListener(OUTLINE_CUSTOM_EVENT, onOutline)
         return onOutline
       }),
       onOutline =>
         Effect.sync(() =>
-          window.removeEventListener('foldkit:outline', onOutline),
+          window.removeEventListener(OUTLINE_CUSTOM_EVENT, onOutline),
         ),
     ).pipe(Effect.flatMap(() => Effect.never)),
 )
@@ -53,7 +54,6 @@ type ScrollIngressState = {
 }
 
 export const acquireScrollIngress = (
-  store: Map<string, ActiveOutline>,
   onCommands: (commands: ReadonlyArray<OutlineCommand>) => void,
 ) =>
   Effect.acquireRelease(
@@ -106,7 +106,7 @@ export const acquireScrollIngress = (
             }),
           )
         }
-        if (hasNestedScroll && deltaX === 0 && deltaY === 0 && store.size > 0) {
+        if (hasNestedScroll && deltaX === 0 && deltaY === 0) {
           commands.push(OutlineCommand.Scroll({ deltaX: 0, deltaY: 0 }))
         }
 
@@ -156,7 +156,7 @@ export const resizeCommandStream = Stream.callback<OutlineCommand>(queue =>
           OutlineCommand.Resize({
             width: window.innerWidth,
             height: window.innerHeight,
-            dpr: Math.min(window.devicePixelRatio || 1, 2),
+            dpr: getDpr(),
           }),
         )
       }

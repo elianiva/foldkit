@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
-import { Effect } from 'effect'
-
 export type DrawLoop = Readonly<{
   schedule: () => void
   cancel: () => void
@@ -46,7 +43,7 @@ export const makeWorkerDrawLoop = (runFrame: () => boolean): DrawLoop => {
     if (typeof globalThis.requestAnimationFrame === 'function') {
       frameId = globalThis.requestAnimationFrame(draw)
     } else {
-      frameId = globalThis.setTimeout(draw, 16) as unknown as number
+      frameId = globalThis.setTimeout(draw, 16)
     }
   }
 
@@ -81,6 +78,3 @@ export const makeWorkerDrawLoop = (runFrame: () => boolean): DrawLoop => {
 
   return { schedule, cancel }
 }
-
-export const finalizeDrawLoop = (drawLoop: DrawLoop): Effect.Effect<void> =>
-  Effect.sync(() => drawLoop.cancel())

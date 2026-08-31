@@ -1,4 +1,4 @@
-import { Array, Schema as S } from 'effect'
+import { Array, Schema } from 'effect'
 
 import {
   type Document,
@@ -11,23 +11,23 @@ import { evo } from '../../struct/index.js'
 import { defineView } from '../../submodel/public.js'
 import type * as Update from '../../update/index.js'
 
-const Item = S.Struct({
-  id: S.String,
-  value: S.Number,
+const Item = Schema.Struct({
+  id: Schema.String,
+  value: Schema.Number,
 })
 type Item = typeof Item.Type
 
 // MODEL
 
-export const Model = S.Struct({
-  items: S.Array(Item),
+export const Model = Schema.Struct({
+  items: Schema.Array(Item),
 })
 export type Model = typeof Model.Type
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  IncrementedItem: { id: S.String },
+  IncrementedItem: { id: Schema.String },
 })
 export type Message = typeof Message.Type
 

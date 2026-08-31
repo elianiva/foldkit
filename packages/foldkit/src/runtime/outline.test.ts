@@ -2,19 +2,10 @@ import { Effect, Fiber } from 'effect'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DEVTOOLS_OVERLAY_RUNTIME_ID } from '../html/index.js'
+import { OUTLINE_CUSTOM_EVENT, type OutlineRect } from '../outline/public.js'
 import * as App from '../test/apps/outline.js'
 import * as LazyListApp from '../test/apps/outlineLazyList.js'
 import { makeApplication } from './runtime.js'
-
-type OutlineRect = Readonly<{
-  id: string
-  label: string
-  x: number
-  y: number
-  width: number
-  height: number
-  cause?: string
-}>
 
 declare global {
   interface Window {
@@ -103,7 +94,7 @@ const isOutlineBatch = (
 
 const collectOutlineEvents = (): Array<ReadonlyArray<OutlineRect>> => {
   const batches: Array<ReadonlyArray<OutlineRect>> = []
-  window.addEventListener('foldkit:outline', event => {
+  window.addEventListener(OUTLINE_CUSTOM_EVENT, event => {
     if (event instanceof CustomEvent && isOutlineBatch(event.detail)) {
       batches.push(event.detail)
     }

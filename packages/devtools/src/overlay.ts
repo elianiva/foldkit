@@ -177,6 +177,7 @@ const Message = defineMessageUnion({
   ToggledFlatten: { isFlattened: Schema.Boolean },
   ToggledOutlines: { isOutlinesEnabled: Schema.Boolean },
   CompletedPersistDevToolsState: {},
+  CompletedSetOutlineEnabled: {},
   ClickedRow: { index: Schema.Number },
   ClickedResume: {},
   ClickedClear: {},
@@ -422,6 +423,11 @@ class ShadowRootService extends Context.Service<
   ShadowRoot
 >()('foldkit/DevToolsShadowRoot') {}
 
+class DevToolsOutlineService extends Context.Service<
+  DevToolsOutlineService,
+  OutlineService
+>()('foldkit/DevToolsOutline') {}
+
 export const LockScroll = Command.define('LockScroll', {
   messages: [Message.CompletedLockScroll],
   execute: lockScroll.pipe(Effect.as(Message.CompletedLockScroll())),
@@ -572,6 +578,17 @@ export const ScrollToTop = Command.define('ScrollToTop', {
   }),
 })
 
+export const SetOutlineEnabled = Command.define('SetOutlineEnabled', {
+  args: { enabled: Schema.Boolean },
+  messages: [Message.CompletedSetOutlineEnabled],
+  execute: ({ enabled }) =>
+    Effect.gen(function* () {
+      const outline = yield* DevToolsOutlineService
+      outline.setEnabled(enabled)
+      return Message.CompletedSetOutlineEnabled()
+    }),
+})
+
 const makeUpdate = (
   store: DevToolsStore,
   shadow: ShadowRoot,
@@ -579,17 +596,24 @@ const makeUpdate = (
   outline: OutlineService,
 ) => {
   const provideContext = <A, E>(
-    effect: Effect.Effect<A, E, StoreService | ShadowRootService>,
+    effect: Effect.Effect<
+      A,
+      E,
+      StoreService | ShadowRootService | DevToolsOutlineService
+    >,
   ): Effect.Effect<A, E, never> =>
     effect.pipe(
       Effect.provideService(StoreService, store),
       Effect.provideService(ShadowRootService, shadow),
+      Effect.provideService(DevToolsOutlineService, outline),
     )
 
   const inspectLatest = Command.mapEffect(InspectLatest(), provideContext)
   const resume = Command.mapEffect(Resume(), provideContext)
   const clear = Command.mapEffect(Clear(), provideContext)
   const scrollToTop = Command.mapEffect(ScrollToTop(), provideContext)
+  const setOutlineEnabled = (enabled: boolean) =>
+    Command.mapEffect(SetOutlineEnabled({ enabled }), provideContext)
 
   const jumpToAndInspect = (index: number) =>
     Command.mapEffect(JumpToAndInspect({ index }), provideContext)
@@ -635,19 +659,17 @@ const makeUpdate = (
           }),
         ],
       }),
-      ToggledOutlines: ({ isOutlinesEnabled }) => {
-        outline.setEnabled(isOutlinesEnabled)
-        return {
-          model: evo(model, { isOutlinesEnabled: () => isOutlinesEnabled }),
-          commands: [
-            PersistDevToolsState({
-              isOpen: model.isOpen,
-              isFlattened: model.isFlattened,
-              isOutlinesEnabled,
-            }),
-          ],
-        }
-      },
+      ToggledOutlines: ({ isOutlinesEnabled }) => ({
+        model: evo(model, { isOutlinesEnabled: () => isOutlinesEnabled }),
+        commands: [
+          setOutlineEnabled(isOutlinesEnabled),
+          PersistDevToolsState({
+            isOpen: model.isOpen,
+            isFlattened: model.isFlattened,
+            isOutlinesEnabled,
+          }),
+        ],
+      }),
       CrossedMobileBreakpoint: ({ isMobile }) => ({
         model: evo(model, { isMobile: () => isMobile }),
         commands: Option.toArray(maybeToggleScrollLock(model.isOpen, isMobile)),
@@ -828,6 +850,7 @@ const makeUpdate = (
       CompletedResume: () => ({ model }),
       CompletedClear: () => ({ model }),
       CompletedPersistDevToolsState: () => ({ model }),
+      CompletedSetOutlineEnabled: () => ({ model }),
       CompletedLockScroll: () => ({ model }),
       CompletedUnlockScroll: () => ({ model }),
       CompletedScrollToTop: () => ({ model }),
@@ -1842,7 +1865,7 @@ const buildOverlayView = (
                       letterSpacing: '0',
                     }),
                   ],
-                  [String(model.fps)],
+                  [`${model.fps}`],
                 ),
               ],
             ),

@@ -13,6 +13,19 @@ export const lerp = (start: number, end: number): number => {
   return start + delta * INTERPOLATION_SPEED
 }
 
+const nextCause = (
+  rect: OutlineRect,
+  existing: ActiveOutline | undefined,
+): { cause?: string } => {
+  if (rect.cause !== undefined) {
+    return { cause: rect.cause }
+  }
+  if (existing?.cause !== undefined) {
+    return { cause: existing.cause }
+  }
+  return {}
+}
+
 export const updateOutlines = (
   activeOutlines: Map<string, ActiveOutline>,
   rects: ReadonlyArray<OutlineRect>,
@@ -29,11 +42,7 @@ export const updateOutlines = (
         targetWidth: rect.width,
         targetHeight: rect.height,
         label: rect.label,
-        ...(rect.cause !== undefined
-          ? { cause: rect.cause }
-          : existing.cause !== undefined
-            ? { cause: existing.cause }
-            : {}),
+        ...nextCause(rect, existing),
       }
       activeOutlines.set(rect.id, next)
     } else {

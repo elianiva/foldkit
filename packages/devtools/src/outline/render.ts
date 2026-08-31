@@ -1,10 +1,7 @@
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
 import { MONO_FONT, PRIMARY_COLOR, TOTAL_FRAMES } from './constants.js'
 import { buildLabels, mergeOverlappingLabels } from './labels.js'
 import { advanceOutlines, expireOutlines } from './model.js'
 import type { ActiveOutline } from './types.js'
-
-type CanvasWithTextRendering = { textRendering: string }
 
 const PRIMARY_RGB: readonly [number, number, number] = [115, 97, 230]
 const HOT_RGB: readonly [number, number, number] = [239, 68, 68]
@@ -19,10 +16,18 @@ const heatColor = (count: number): string => {
   return `${red},${green},${blue}`
 }
 
-export const initCanvas = (
+export function initCanvas(
+  canvas: HTMLCanvasElement,
+  dpr: number,
+): CanvasRenderingContext2D | null
+export function initCanvas(
+  canvas: OffscreenCanvas,
+  dpr: number,
+): OffscreenCanvasRenderingContext2D | null
+export function initCanvas(
   canvas: HTMLCanvasElement | OffscreenCanvas,
   dpr: number,
-): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null => {
+): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null {
   const ctx = canvas.getContext('2d', { alpha: true })
   if (ctx) {
     ctx.scale(dpr, dpr)
@@ -73,6 +78,14 @@ export const buildRectMap = (
   return rectMap
 }
 
+const setTextRenderingOptimizeSpeed = (
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+): void => {
+  if ('textRendering' in ctx) {
+    Reflect.set(ctx, 'textRendering', 'optimizeSpeed')
+  }
+}
+
 export const drawFrame = (
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   canvas: HTMLCanvasElement | OffscreenCanvas,
@@ -99,9 +112,7 @@ export const drawFrame = (
     ctx.fill()
   }
 
-  if ('textRendering' in ctx) {
-    ;(ctx as CanvasWithTextRendering).textRendering = 'optimizeSpeed'
-  }
+  setTextRenderingOptimizeSpeed(ctx)
   ctx.font = `11px ${MONO_FONT}`
 
   const labels = buildLabels(activeOutlines, ctx)

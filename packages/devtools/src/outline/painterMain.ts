@@ -1,12 +1,14 @@
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
-import { Effect, Ref } from 'effect'
+import { Effect } from 'effect'
 
 import { OUTLINE_Z_INDEX } from './constants.js'
-import { finalizeDrawLoop, makeDrawLoop } from './drawLoop.js'
+import { makeDrawLoop } from './drawLoop.js'
 import { clampedCanvasSize, getDpr } from './geometry.js'
+import { updateOutlines, updateScroll } from './model.js'
 import type { OutlinePainter } from './painter.js'
 import { drawFrame, initCanvas } from './render.js'
-import type { ActiveOutline } from './types.js'
+import type { ActiveOutline, OutlineRect } from './types.js'
+
+export type CanvasHolder = { el: HTMLCanvasElement }
 
 const isCanvasNeutered = (canvasEl: HTMLCanvasElement): boolean => {
   try {
@@ -18,9 +20,10 @@ const isCanvasNeutered = (canvasEl: HTMLCanvasElement): boolean => {
 }
 
 const recreateCanvasIfNeutered = (
-  canvas: HTMLCanvasElement,
+  canvasHolder: CanvasHolder,
   isVisible: boolean,
 ): HTMLCanvasElement => {
+  const canvas = canvasHolder.el
   let isNeutered = false
   try {
     const testCtx = canvas.getContext('2d')
@@ -60,45 +63,49 @@ const recreateCanvasIfNeutered = (
 }
 
 export const acquireMainPainter = (
-  initialCanvas: HTMLCanvasElement,
-  storeRef: Ref.Ref<Map<string, ActiveOutline>>,
-  enabledRef: Ref.Ref<boolean>,
+  canvasHolder: CanvasHolder,
+  getEnabled: () => boolean,
 ) =>
   Effect.gen(function* () {
-    let canvas = initialCanvas
+    let canvas = canvasHolder.el
     let ctx: CanvasRenderingContext2D | null = null
     let dpr = getDpr()
 
     if (isCanvasNeutered(canvas)) {
-      canvas = recreateCanvasIfNeutered(
-        canvas,
-        (yield* Ref.get(enabledRef)) === true,
-      )
+      canvas = recreateCanvasIfNeutered(canvasHolder, getEnabled() === true)
+      canvasHolder.el = canvas
     }
-    ctx = initCanvas(canvas, dpr) as CanvasRenderingContext2D | null
+    ctx = initCanvas(canvas, dpr)
+
+    const activeOutlines = new Map<string, ActiveOutline>()
 
     const drawLoop = makeDrawLoop(() => {
       if (!ctx) {
         return false
       }
-      const enabled = Ref.get(enabledRef)
-      if (Effect.runSync(enabled) !== true) {
+      if (getEnabled() !== true) {
         return false
       }
-      const store = Effect.runSync(Ref.get(storeRef))
-      return drawFrame(ctx, canvas, getDpr(), store)
+      return drawFrame(ctx, canvas, getDpr(), activeOutlines)
     })
 
     const scheduleIfStoreHasOutlines = (): void => {
-      const store = Effect.runSync(Ref.get(storeRef))
-      if (store.size > 0) {
+      if (activeOutlines.size > 0) {
         drawLoop.schedule()
       }
     }
 
     const painter: OutlinePainter = {
-      pushRects: () => drawLoop.schedule(),
-      applyScroll: (_deltaX, _deltaY) => scheduleIfStoreHasOutlines(),
+      pushRects: (rects: ReadonlyArray<OutlineRect>) => {
+        updateOutlines(activeOutlines, rects)
+        drawLoop.schedule()
+      },
+      applyScroll: (deltaX, deltaY) => {
+        if (activeOutlines.size > 0) {
+          updateScroll(activeOutlines, deltaX, deltaY)
+          scheduleIfStoreHasOutlines()
+        }
+      },
       resize: (width, height, nextDpr) => {
         dpr = nextDpr
         canvas.style.width = `${width}px`
@@ -116,6 +123,7 @@ export const acquireMainPainter = (
       },
       clear: () => {
         drawLoop.cancel()
+        activeOutlines.clear()
         if (ctx) {
           const currentDpr = getDpr()
           ctx.clearRect(
@@ -128,7 +136,7 @@ export const acquireMainPainter = (
       },
     }
 
-    yield* finalizeDrawLoop(drawLoop)
+    yield* Effect.addFinalizer(() => Effect.sync(() => drawLoop.cancel()))
 
     return painter
   })

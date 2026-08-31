@@ -1,5 +1,3 @@
-export const OUTLINE_ENABLED_KEY = '__foldkitOutlinesEnabled'
-
 export const MAX_DPR = 2
 
 export const OUTLINE_Z_INDEX = '2147483646'
