@@ -1,23 +1,22 @@
-import { click, expect, given, role, scene, text } from 'foldkit/scene'
+import {
+  all,
+  click,
+  expect,
+  expectAll,
+  first,
+  given,
+  role,
+  scene,
+  text,
+} from 'foldkit/scene'
 import { describe, test } from 'vitest'
 
-import { type Model, update, view } from './main'
+import { init, update, view } from './main'
 
-const initialModel: Model = {
-  isMemoized: true,
-  tick: 0,
-  counter: 0,
-  items: [
-    { id: 'item-1', label: 'Item 1', value: 0 },
-    { id: 'item-2', label: 'Item 2', value: 0 },
-    { id: 'item-3', label: 'Item 3', value: 0 },
-    { id: 'item-4', label: 'Item 4', value: 0 },
-    { id: 'item-5', label: 'Item 5', value: 0 },
-  ],
-}
+const initialModel = init().model
 
 describe('view', () => {
-  test('renders the memoization controls and counter region', () => {
+  test('renders memoization controls and both submodel regions', () => {
     scene(
       { update, view },
       given(initialModel),
@@ -25,16 +24,28 @@ describe('view', () => {
       expect(role('button', { name: 'Increment tick' })).toExist(),
       expect(role('button', { name: 'Increment counter' })).toExist(),
       expect(text('Counter state')).toExist(),
-      expect(text('0')).toExist(),
+      expect(text('Deep list')).toExist(),
+      expect(text('5 items')).toExist(),
+      expect(text('Item 1')).toExist(),
     )
   })
 
-  test('increment tick updates the counter region', () => {
+  test('add item increases the list count', () => {
     scene(
       { update, view },
       given(initialModel),
-      click(role('button', { name: 'Increment tick' })),
-      expect(text('1')).toExist(),
+      click(role('button', { name: 'Add item' })),
+      expect(text('6 items')).toExist(),
+    )
+  })
+
+  test('incrementing a row updates only that row value badge', () => {
+    scene(
+      { update, view },
+      given(initialModel),
+      click(first(all.role('button', { name: 'Increment' }))),
+      expect(text('value 1')).toExist(),
+      expectAll(all.text('value 0')).toHaveCount(4),
     )
   })
 })
