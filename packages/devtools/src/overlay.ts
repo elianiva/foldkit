@@ -171,7 +171,7 @@ const Flags = Schema.Struct({
 // NOTE: suspend for the same init-order reason as scrubberSlider above.
 
 const Message = defineMessageUnion({
-  TickedFps: { fps: S.Number },
+  TickedFps: { fps: Schema.Number },
   ClickedToggle: {},
   ClickedSettingsToggle: {},
   ToggledFlatten: { isFlattened: Schema.Boolean },
