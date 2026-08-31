@@ -86,12 +86,13 @@ const makeNoopOutlineService = (
 
   return {
     setEnabled: enabled => {
-      Ref.set(enabledRef, enabled)
+      Effect.runSync(Ref.set(enabledRef, enabled))
       syncOutlineWindowFlag(enabled)
       refreshSnapshot()
     },
-    setFilter: predicate => Ref.set(filterRef, Option.some(predicate)),
-    clearFilter: () => Ref.set(filterRef, Option.none()),
+    setFilter: predicate =>
+      Effect.runSync(Ref.set(filterRef, Option.some(predicate))),
+    clearFilter: () => Effect.runSync(Ref.set(filterRef, Option.none())),
     findAt: (x, y) => findOutlineInStore(store, x, y),
     snapshot: publishSnapshot,
     changes: SubscriptionRef.changes(snapshotRef),
@@ -173,7 +174,7 @@ export const makeOutlineService = (initialEnabled: boolean) =>
 
     const service: OutlineService = {
       setEnabled: enabled => {
-        Ref.set(enabledRef, enabled)
+        Effect.runSync(Ref.set(enabledRef, enabled))
         syncOutlineWindowFlag(enabled)
         dispatchSync(OutlineCommand.SetVisible({ visible: enabled }))
         if (!enabled) {
@@ -181,8 +182,9 @@ export const makeOutlineService = (initialEnabled: boolean) =>
         }
         refreshSnapshot()
       },
-      setFilter: predicate => Ref.set(filterRef, Option.some(predicate)),
-      clearFilter: () => Ref.set(filterRef, Option.none()),
+      setFilter: predicate =>
+        Effect.runSync(Ref.set(filterRef, Option.some(predicate))),
+      clearFilter: () => Effect.runSync(Ref.set(filterRef, Option.none())),
       findAt: (x, y) => {
         const currentStore = Effect.runSync(Ref.get(storeRef))
         return findOutlineInStore(currentStore, x, y)
