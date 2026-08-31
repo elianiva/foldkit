@@ -1,3 +1,7 @@
+import {
+  setOutlineRecordingEnabled,
+  shouldRecordOutline,
+} from '../outline/recording.js'
 import type { VNode } from '../snabbdom/vnode.js'
 import type { DispatchSync } from './runtimeSingleton.js'
 
@@ -482,15 +486,7 @@ export const getOrCreateBoundaryDispatch = (
  *  it during patch to tell a same-cycle remount (a keyed root whose
  *  key changed) from a true unmount; clearing it mid-cycle would
  *  resurrect the `dispatchAcrossBoundary missing wrap` crash. */
-export const shouldRecordOutline = (): boolean =>
-  typeof window !== 'undefined' &&
-  Reflect.get(window, '__foldkitOutlinesEnabled') === true
-
-export const setOutlineRecordingEnabled = (enabled: boolean): void => {
-  if (typeof window !== 'undefined') {
-    Reflect.set(window, '__foldkitOutlinesEnabled', enabled)
-  }
-}
+export { setOutlineRecordingEnabled, shouldRecordOutline }
 
 export const trackOutline = (
   registry: BoundaryRegistry,
