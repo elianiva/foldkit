@@ -1080,6 +1080,28 @@ export const docsView = (
           }),
           Page.UiPages.VirtualListPage.tableOfContents,
         ),
+      UiMeter: () =>
+        withTableOfContents(
+          h.submodel({
+            slotId: 'ui-Meter',
+            model: model.uiPages,
+            view: Page.UiPages.MeterPage.view,
+            viewInputs: { renderCopyButton, renderHeadingLink },
+            toParentMessage: toUiPageMessage,
+          }),
+          Page.UiPages.MeterPage.tableOfContents,
+        ),
+      UiProgress: () =>
+        withTableOfContents(
+          h.submodel({
+            slotId: 'ui-Progress',
+            model: model.uiPages,
+            view: Page.UiPages.ProgressPage.view,
+            viewInputs: { renderCopyButton, renderHeadingLink },
+            toParentMessage: toUiPageMessage,
+          }),
+          Page.UiPages.ProgressPage.tableOfContents,
+        ),
       AiOverview: () =>
         withTableOfContents(
           lazyDocsContent(Page.AiOverview.view, [model.copiedSnippets, h]),

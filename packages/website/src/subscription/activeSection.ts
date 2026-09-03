@@ -131,6 +131,8 @@ export const subscriptions = Subscription.make<Model, Message>()(entry => ({
             UiAnchor: () => Page.UiPages.AnchorPage.tableOfContents,
             UiHoverIntent: () => Page.UiPages.HoverIntentPage.tableOfContents,
             UiVirtualList: () => Page.UiPages.VirtualListPage.tableOfContents,
+            UiMeter: () => Page.UiPages.MeterPage.tableOfContents,
+            UiProgress: () => Page.UiPages.ProgressPage.tableOfContents,
             UiOverview: () => Page.UiPages.OverviewPage.tableOfContents,
             UiSelectionSubmodels: () =>
               Page.UiPages.SelectionSubmodelsPage.tableOfContents,
