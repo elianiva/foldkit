@@ -1,6 +1,7 @@
-import { Option, pipe } from 'effect'
+import { Option, Schema, pipe } from 'effect'
 import { describe, expect, expectTypeOf, test } from 'vitest'
 
+import * as CustomElement from '../customElement/index.js'
 import {
   type HtmlBuilder,
   __htmlBuilder as attributeHtml,
@@ -2935,6 +2936,59 @@ describe('Scene.CustomElement.emit', () => {
       'color-changed',
       // @ts-expect-error detail must match the color-changed Schema
       { value: 5 },
+    )
+  })
+
+  test('accepts encoded detail and dispatches the decoded value', () => {
+    const transformedDetailElement = CustomElement.define({
+      tag: 'fk-transformed-detail',
+      properties: {},
+      events: { changed: Schema.NumberFromString },
+    })
+    const TransformedMessage = defineMessageUnion({
+      ChangedValue: { value: Schema.Number },
+    })
+    type TransformedMessage = typeof TransformedMessage.Type
+    const TransformedModel = Schema.Struct({ value: Schema.Number })
+    type TransformedModel = typeof TransformedModel.Type
+    const initialModel = TransformedModel.make({ value: 0 })
+    const update = (model: TransformedModel, message: TransformedMessage) =>
+      TransformedMessage.match<
+        Update.Return<TransformedModel, TransformedMessage>
+      >(message, {
+        ChangedValue: ({ value }) => ({
+          model: evo(model, { value: () => value }),
+        }),
+      })
+    const view = (
+      model: TransformedModel,
+      h: HtmlBuilder<TransformedMessage>,
+    ) => {
+      const element = transformedDetailElement.withMessage(h)
+
+      return h.div(
+        [],
+        [
+          element([
+            element.OnChanged(value =>
+              TransformedMessage.ChangedValue({ value }),
+            ),
+          ]),
+          h.span([h.Role('status')], [globalThis.String(model.value)]),
+        ],
+      )
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.given(initialModel),
+      Scene.CustomElement.emit(
+        transformedDetailElement,
+        Scene.selector('fk-transformed-detail'),
+        'changed',
+        '5',
+      ),
+      Scene.expect(Scene.role('status')).toHaveText('5'),
     )
   })
 
