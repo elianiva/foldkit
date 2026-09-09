@@ -124,6 +124,8 @@ Two constraints account for most uses. `event.preventDefault()` must run before 
 
 `OnClick` accepts `defaultAction`, `propagation`, and `focusSelector` controls. Foldkit applies them synchronously before dispatching the Message. `OnKeyDownPreventDefault` lets a translator decide whether to claim a key event. `OnPastePreventDefault` passes the clipboard's `text/plain` payload to its translator; `Some` suppresses the default insertion and dispatches the Message, while `None` leaves the paste alone. `OnCopyText` and `OnCutText` write Model-derived text to the clipboard and suppress the browser's default payload; the cut variant also dispatches a Message.
 
+`OnBeforeInputPreventDefault` is the editor-grade member for a `Contenteditable` host. Its translator receives the edit's `inputType` and its `data` as an `Option`. Returning `Some` suppresses the native edit and dispatches the Message, so update owns the document mutation before the DOM changes; `None` lets the edit proceed. A non-cancelable edit, including some IME composition input, proceeds without dispatching and can be reconciled through `OnInput`.
+
 `OnCancelPreventDefault` always suppresses a cancel event's default action. A native cancel event dispatches no Message. A `CustomEvent` dispatches the optional Message, so an application-owned cancel signal can use the same event name without treating native cancellation as a state change. Dialog uses this distinction to ignore the native cancel event observed when a file picker closes and map `Dom.showDialog`'s signal for an unhandled Escape to `RequestedClose`.
 
 ::Snippet{name="eventHandlerSideEffects" label="event handler side effects example"}

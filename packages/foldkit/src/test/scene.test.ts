@@ -35,6 +35,11 @@ import {
   hexColorPicker,
 } from './apps/colorPicker.js'
 import {
+  initialModel as contentEditableInitialModel,
+  update as contentEditableUpdate,
+  view as contentEditableView,
+} from './apps/contentEditableEditor.js'
+import {
   initialModel as contextMenuInitialModel,
   update as contextMenuUpdate,
   view as contextMenuView,
@@ -1772,6 +1777,50 @@ describe('scene', () => {
       Scene.tap(({ html }) => {
         expect(getByLabel('Last key')(html)).toHaveText('x')
       }),
+    )
+  })
+
+  test('typeContentEditable dispatches the rendered text through OnInput', () => {
+    Scene.scene(
+      { update: contentEditableUpdate, view: contentEditableView },
+      Scene.given(contentEditableInitialModel),
+      Scene.typeContentEditable(Scene.testId('editor'), 'Hello, world'),
+      Scene.expect(Scene.testId('editor')).toHaveText('Hello, world'),
+    )
+  })
+
+  test('typeContentEditable replaces the rendered text on the next input', () => {
+    Scene.scene(
+      { update: contentEditableUpdate, view: contentEditableView },
+      Scene.given(contentEditableInitialModel),
+      Scene.typeContentEditable(Scene.testId('editor'), 'first'),
+      Scene.typeContentEditable(Scene.testId('editor'), 'second'),
+      Scene.expect(Scene.testId('editor')).toHaveText('second'),
+    )
+  })
+
+  test('beforeInput lets update own contenteditable insertions', () => {
+    Scene.scene(
+      { update: contentEditableUpdate, view: contentEditableView },
+      Scene.given(contentEditableInitialModel),
+      Scene.beforeInput(Scene.testId('editor'), 'insertText', Option.some('A')),
+      Scene.beforeInput(Scene.testId('editor'), 'insertText', Option.some('B')),
+      Scene.expect(Scene.testId('editor')).toHaveText('AB'),
+    )
+  })
+
+  test('beforeInput records an unclaimed edit as ignored', () => {
+    Scene.scene(
+      { update: contentEditableUpdate, view: contentEditableView },
+      Scene.given(contentEditableInitialModel),
+      Scene.beforeInput(Scene.testId('editor'), 'insertText', Option.some('A')),
+      Scene.beforeInput(
+        Scene.testId('editor'),
+        'deleteContentBackward',
+        Option.none(),
+      ),
+      Scene.expectIgnored(),
+      Scene.expect(Scene.testId('editor')).toHaveText('A'),
     )
   })
 

@@ -6,6 +6,7 @@ import {
   Fiber,
   Function,
   Option,
+  Predicate,
   Record,
   Schema,
   Stream,
@@ -160,6 +161,31 @@ const keyboardModifiers = (event: KeyboardEvent): KeyboardModifiers => ({
   altKey: event.altKey,
   metaKey: event.metaKey,
 })
+
+const inputEventValue = (target: EventTarget | null): string => {
+  if (
+    Predicate.hasProperty(target, 'value') &&
+    Predicate.isString(target.value)
+  ) {
+    return target.value
+  }
+
+  if (
+    Predicate.hasProperty(target, 'innerText') &&
+    Predicate.isString(target.innerText)
+  ) {
+    return target.innerText
+  }
+
+  if (
+    Predicate.hasProperty(target, 'textContent') &&
+    Predicate.isString(target.textContent)
+  ) {
+    return target.textContent
+  }
+
+  return ''
+}
 
 const isEventTargetCurrentTarget = (event: Event): boolean =>
   event.target === event.currentTarget
@@ -638,6 +664,15 @@ export type Attribute<Message> = Data.TaggedEnum<{
   OnFocusLeave: { readonly message: Message }
   OnInput: { readonly f: (value: string) => Message }
   OnChange: { readonly f: (value: string) => Message }
+  OnBeforeInput: {
+    readonly f: (inputType: string, data: Option.Option<string>) => Message
+  }
+  OnBeforeInputPreventDefault: {
+    readonly f: (
+      inputType: string,
+      data: Option.Option<string>,
+    ) => Option.Option<Message>
+  }
   OnFileChange: {
     readonly f: (files: ReadonlyArray<File>) => Message
   }
@@ -973,6 +1008,8 @@ const {
   OnFocusLeave,
   OnInput,
   OnChange,
+  OnBeforeInput,
+  OnBeforeInputPreventDefault,
   OnFileChange,
   OnSubmit,
   OnReset,
@@ -1796,14 +1833,36 @@ const attributeHandlers: AttributeHandlers = {
   OnInput: ({ f: toMessage }, ctx: BuildContext) =>
     updateDataOn(ctx, {
       input: (event: Event) =>
-        /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
-        ctx.dispatch(toMessage((event.target as HTMLInputElement).value)),
+        ctx.dispatch(toMessage(inputEventValue(event.target))),
     }),
   OnChange: ({ f: toMessage }, ctx: BuildContext) =>
     updateDataOn(ctx, {
       change: (event: Event) =>
-        /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
-        ctx.dispatch(toMessage((event.target as HTMLInputElement).value)),
+        ctx.dispatch(toMessage(inputEventValue(event.target))),
+    }),
+  OnBeforeInput: ({ f: toMessage }, ctx: BuildContext) =>
+    updateDataOn(ctx, {
+      beforeinput: (event: InputEvent) =>
+        ctx.dispatch(
+          toMessage(event.inputType, Option.fromNullishOr(event.data)),
+        ),
+    }),
+  OnBeforeInputPreventDefault: ({ f: toMaybeMessage }, ctx: BuildContext) =>
+    updateDataOn(ctx, {
+      beforeinput: (event: InputEvent) => {
+        if (!event.cancelable) {
+          return
+        }
+
+        const maybeMessage = toMaybeMessage(
+          event.inputType,
+          Option.fromNullishOr(event.data),
+        )
+        if (Option.isSome(maybeMessage)) {
+          event.preventDefault()
+          ctx.dispatch(maybeMessage.value)
+        }
+      },
     }),
   OnFileChange: ({ f: toMessage }, ctx: BuildContext) =>
     updateDataOn(ctx, {
@@ -3935,6 +3994,24 @@ type HtmlAttributes<Message> = {
     readonly _tag: 'OnChange'
     readonly f: (value: string) => Message
   }
+  OnBeforeInput: (
+    toMessage: (inputType: string, data: Option.Option<string>) => Message,
+  ) => {
+    readonly _tag: 'OnBeforeInput'
+    readonly f: (inputType: string, data: Option.Option<string>) => Message
+  }
+  OnBeforeInputPreventDefault: (
+    toMaybeMessage: (
+      inputType: string,
+      data: Option.Option<string>,
+    ) => Option.Option<Message>,
+  ) => {
+    readonly _tag: 'OnBeforeInputPreventDefault'
+    readonly f: (
+      inputType: string,
+      data: Option.Option<string>,
+    ) => Option.Option<Message>
+  }
   OnFileChange: (toMessage: (files: ReadonlyArray<File>) => Message) => {
     readonly _tag: 'OnFileChange'
     readonly f: (files: ReadonlyArray<File>) => Message
@@ -4985,9 +5062,49 @@ const htmlAttributes = <Message>(): HtmlAttributes<Message> => ({
   OnBlur: (message: Message) => OnBlur({ message }),
   OnFocusEnter: (message: Message) => OnFocusEnter({ message }),
   OnFocusLeave: (message: Message) => OnFocusLeave({ message }),
+  /**
+   * Dispatches the target's textual value on every `input` event. Form
+   * controls report their `value`; a `Contenteditable` host reports its
+   * rendered text.
+   */
   OnInput: (toMessage: (value: string) => Message) => OnInput({ f: toMessage }),
+  /**
+   * Dispatches the target's textual value on every `change` event, using the
+   * same form-control and `Contenteditable` value semantics as `OnInput`.
+   */
   OnChange: (toMessage: (value: string) => Message) =>
     OnChange({ f: toMessage }),
+  /**
+   * Observes `beforeinput` events. The translator receives the edit's
+   * `inputType` and its `data` as an `Option`; edits such as deletion usually
+   * carry no text and therefore provide `None`.
+   */
+  OnBeforeInput: (
+    toMessage: (inputType: string, data: Option.Option<string>) => Message,
+  ) => OnBeforeInput({ f: toMessage }),
+  /**
+   * Handles cancelable `beforeinput` events before the browser mutates the
+   * DOM. Returning `Some` prevents the native edit and dispatches the Message;
+   * returning `None` lets the edit proceed.
+   *
+   * A non-cancelable edit, including some IME composition input, proceeds
+   * without dispatching. Use `OnInput` to reconcile the resulting content.
+   *
+   * @example
+   * ```typescript
+   * h.OnBeforeInputPreventDefault((inputType, data) =>
+   *   inputType === 'insertText'
+   *     ? Option.map(data, value => Message.InsertedText({ value }))
+   *     : Option.none(),
+   * )
+   * ```
+   */
+  OnBeforeInputPreventDefault: (
+    toMaybeMessage: (
+      inputType: string,
+      data: Option.Option<string>,
+    ) => Option.Option<Message>,
+  ) => OnBeforeInputPreventDefault({ f: toMaybeMessage }),
   OnFileChange: (toMessage: (files: ReadonlyArray<File>) => Message) =>
     OnFileChange({ f: toMessage }),
   OnSubmit: (message: Message) => OnSubmit({ message }),
