@@ -25,7 +25,12 @@ const testView =
   ({
     isDisabled = false,
     isReadOnly = false,
-  }: { isDisabled?: boolean; isReadOnly?: boolean } = {}) =>
+    hasDescription = false,
+  }: {
+    isDisabled?: boolean
+    isReadOnly?: boolean
+    hasDescription?: boolean
+  } = {}) =>
   (model: Model, h: HtmlBuilder<Message>) =>
     view(
       {
@@ -34,10 +39,15 @@ const testView =
         onInput: value => Message.Changed({ value }),
         isDisabled,
         isReadOnly,
-        toView: ({ textarea, label }) =>
+        hasDescription,
+        toView: ({ textarea, label, description }) =>
           h.div(
             [],
-            [h.textarea([...textarea]), h.label([...label], ['Message'])],
+            [
+              h.textarea([...textarea]),
+              h.label([...label], ['Message']),
+              ...(hasDescription ? [h.p([...description], ['Hint'])] : []),
+            ],
           ),
       },
       h,
@@ -46,6 +56,22 @@ const testView =
 const field = Scene.role('textbox')
 
 describe('Textarea controlled view', () => {
+  it('omits aria-describedby by default', () => {
+    Scene.scene(
+      { update, view: testView() },
+      Scene.given({ value: '' }),
+      Scene.expect(field).not.toHaveAttr('aria-describedby'),
+    )
+  })
+
+  it('references the description when opted in', () => {
+    Scene.scene(
+      { update, view: testView({ hasDescription: true }) },
+      Scene.given({ value: '' }),
+      Scene.expect(field).toHaveAttr('aria-describedby', 'test-description'),
+    )
+  })
+
   it('dispatches the typed value', () => {
     Scene.scene(
       { update, view: testView() },

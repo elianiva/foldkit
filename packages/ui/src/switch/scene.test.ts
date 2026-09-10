@@ -27,7 +27,12 @@ const testView =
   ({
     isDisabled = false,
     isReadOnly = false,
-  }: { isDisabled?: boolean; isReadOnly?: boolean } = {}) =>
+    hasDescription = false,
+  }: {
+    isDisabled?: boolean
+    isReadOnly?: boolean
+    hasDescription?: boolean
+  } = {}) =>
   (model: Model, h: HtmlBuilder<Message>) =>
     view(
       {
@@ -36,10 +41,15 @@ const testView =
         onToggle: isChecked => Message.Toggled({ isChecked }),
         isDisabled,
         isReadOnly,
-        toView: ({ button, label }) =>
+        hasDescription,
+        toView: ({ button, label, description }) =>
           h.div(
             [],
-            [h.button([...button]), h.span([...label], ['Notifications'])],
+            [
+              h.button([...button]),
+              h.span([...label], ['Notifications']),
+              ...(hasDescription ? [h.p([...description], ['Hint'])] : []),
+            ],
           ),
       },
       h,
@@ -49,6 +59,22 @@ const toggle = Scene.role('switch')
 const label = Scene.selector('#test-label')
 
 describe('Switch controlled view', () => {
+  it('omits aria-describedby by default', () => {
+    Scene.scene(
+      { update, view: testView() },
+      Scene.given({ isChecked: false }),
+      Scene.expect(toggle).not.toHaveAttr('aria-describedby'),
+    )
+  })
+
+  it('references the description when opted in', () => {
+    Scene.scene(
+      { update, view: testView({ hasDescription: true }) },
+      Scene.given({ isChecked: false }),
+      Scene.expect(toggle).toHaveAttr('aria-describedby', 'test-description'),
+    )
+  })
+
   it('reflects the checked state from the parent', () => {
     Scene.scene(
       { update, view: testView() },

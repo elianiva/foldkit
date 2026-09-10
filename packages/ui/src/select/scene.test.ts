@@ -22,7 +22,10 @@ const update = (model: Model, message: Message) =>
   })
 
 const testView =
-  ({ isDisabled = false }: { isDisabled?: boolean } = {}) =>
+  ({
+    isDisabled = false,
+    hasDescription = false,
+  }: { isDisabled?: boolean; hasDescription?: boolean } = {}) =>
   (model: Model, h: HtmlBuilder<Message>) =>
     view(
       {
@@ -30,12 +33,14 @@ const testView =
         value: model.value,
         onChange: value => Message.Changed({ value }),
         isDisabled,
-        toView: ({ select, label }) =>
+        hasDescription,
+        toView: ({ select, label, description }) =>
           h.div(
             [],
             [
               h.select([...select], [h.option([h.Value('a')], ['A'])]),
               h.label([...label], ['Choice']),
+              ...(hasDescription ? [h.p([...description], ['Hint'])] : []),
             ],
           ),
       },
@@ -45,6 +50,22 @@ const testView =
 const field = Scene.role('combobox')
 
 describe('Select controlled view', () => {
+  it('omits aria-describedby by default', () => {
+    Scene.scene(
+      { update, view: testView() },
+      Scene.given({ value: 'a' }),
+      Scene.expect(field).not.toHaveAttr('aria-describedby'),
+    )
+  })
+
+  it('references the description when opted in', () => {
+    Scene.scene(
+      { update, view: testView({ hasDescription: true }) },
+      Scene.given({ value: 'a' }),
+      Scene.expect(field).toHaveAttr('aria-describedby', 'test-description'),
+    )
+  })
+
   it('is not interactive when disabled', () => {
     Scene.scene(
       { update, view: testView({ isDisabled: true }) },

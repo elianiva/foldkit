@@ -55,12 +55,14 @@ const dialogHasOnUnmount = (model: Model): boolean => {
 const renderGroup = (
   model: Model,
   selectGroup: (render: RenderInfo) => ReadonlyArray<ChildAttribute>,
+  hasDescription = false,
 ): ReadonlyArray<ChildAttribute> => {
   let captured: ReadonlyArray<ChildAttribute> = []
   const sceneView = (currentModel: Model, h: HtmlBuilder<Message>) =>
     view(
       currentModel,
       {
+        hasDescription,
         toView: render => {
           captured = selectGroup(render)
           return h.dialog([...render.dialog])
@@ -101,6 +103,17 @@ const hasButtonType = (group: ReadonlyArray<ChildAttribute>): boolean =>
       Predicate.isTagged(attribute, 'Type') &&
       Predicate.hasProperty(attribute, 'value') &&
       attribute.value === 'button',
+  )
+
+const hasAriaDescribedBy = (
+  group: ReadonlyArray<ChildAttribute>,
+  id: string,
+): boolean =>
+  group.some(
+    ({ attribute }) =>
+      Predicate.isTagged(attribute, 'AriaDescribedBy') &&
+      Predicate.hasProperty(attribute, 'value') &&
+      attribute.value === id,
   )
 
 const hasCancelPrevention = (group: ReadonlyArray<ChildAttribute>): boolean =>
@@ -567,6 +580,24 @@ describe('Dialog', () => {
   })
 
   describe('RenderInfo dialog', () => {
+    it('omits aria-describedby by default', () => {
+      expect(
+        hasAriaDescribedBy(
+          renderGroup(init({ id: 'my-dialog' }), render => render.dialog),
+          'my-dialog-dialog-description',
+        ),
+      ).toBe(false)
+    })
+
+    it('references the description when opted in', () => {
+      expect(
+        hasAriaDescribedBy(
+          renderGroup(init({ id: 'my-dialog' }), render => render.dialog, true),
+          'my-dialog-dialog-description',
+        ),
+      ).toBe(true)
+    })
+
     it('suppresses native cancel events', () => {
       expect(
         hasCancelPrevention(

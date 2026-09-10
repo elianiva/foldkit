@@ -1880,6 +1880,7 @@ const buildOverlayView = (
       {
         id: FLATTEN_SWITCH_ID,
         isChecked: model.isFlattened,
+        hasDescription: true,
         onToggle: isFlattened => Message.ToggledFlatten({ isFlattened }),
         toView: attributes =>
           h.div(

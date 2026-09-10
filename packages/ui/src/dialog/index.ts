@@ -355,14 +355,16 @@ export const close = (model: Model): UpdateReturn =>
  *  hand-roll the id string. */
 export const titleId = (model: Model): string => `${model.id}-dialog-title`
 
-/** Returns the framework-managed id the dialog's `aria-describedby` points at,
- *  the `-dialog-description` suffix on `model.id`.
+/** Returns the framework-managed description id, the
+ *  `-dialog-description` suffix on `model.id`.
  *
  *  The primary path is spreading `RenderInfo`'s `description` onto your
  *  description element (`h.p([...description], [...])`), which carries this id
  *  for you. Reach for this helper only when you need the id as a value outside
  *  `toView`: a Command that calls `getElementById`, a cross-element
- *  `aria-describedby`, or a test. Do not hand-roll the id string. */
+ *  `aria-describedby`, or a test. When the description is rendered, set
+ *  `ViewInputs.hasDescription` so the dialog points at this id. Do not
+ *  hand-roll the id string. */
 export const descriptionId = (model: Model): string =>
   `${model.id}-dialog-description`
 
@@ -388,8 +390,9 @@ export const descriptionId = (model: Model): string =>
  *    onto your heading element (`h.h2([...title], [...])`) so labelling
  *    wires up without hand-rolling the id.
  *  - `description`: attributes for the description element. Carries the
- *    framework-managed id the dialog's `aria-describedby` points at. Spread
- *    onto your description element (`h.p([...description], [...])`).
+ *    framework-managed id referenced by `aria-describedby` when
+ *    `ViewInputs.hasDescription` is true. Spread onto your description element
+ *    (`h.p([...description], [...])`).
  *  - `initialFocus`: attributes for the element that should receive focus when
  *    the dialog opens. Spread onto that element (`h.input([...initialFocus])`).
  *    A configured `focusSelector` (see `init`) takes precedence, and focus
@@ -418,6 +421,7 @@ export type RenderInfo = Readonly<{
 /** Per-render view inputs passed to `view` via `h.submodel`'s `viewInputs` field. */
 export type ViewInputs = Readonly<{
   toView: (render: RenderInfo) => Html
+  hasDescription?: boolean
 }>
 
 /** Renders a headless dialog component backed by the native `<dialog>`
@@ -431,7 +435,7 @@ export const view = defineView<Model, Message, ViewInputs>(
       isOpen,
       animation: { transitionState },
     } = model
-    const { toView } = viewInputs
+    const { toView, hasDescription = false } = viewInputs
 
     const isVisible = isOpen || isLeaving(model)
 
@@ -457,10 +461,14 @@ export const view = defineView<Model, Message, ViewInputs>(
       Match.orElse(() => []),
     )
 
+    const describedByAttributes = hasDescription
+      ? [h.AriaDescribedBy(descriptionId(model))]
+      : []
+
     const dialogAttributes = [
       h.Id(id),
       h.AriaLabelledBy(titleId(model)),
-      h.AriaDescribedBy(descriptionId(model)),
+      ...describedByAttributes,
       // NOTE: Chromium reports canceling a file picker as a native `cancel`
       // event observed by the containing dialog. Dom.showDialog uses a
       // CustomEvent for its unhandled-Escape signal, so the two are separable.

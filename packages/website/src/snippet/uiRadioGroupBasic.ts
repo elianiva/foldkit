@@ -90,6 +90,7 @@ const view = (model: Model, h: HtmlBuilder<Message>) =>
       options: plans,
       selectedValue: model.maybePlan,
       ariaLabel: 'Server plan',
+      hasOptionDescription: () => true,
       toView: ({ group, options }) =>
         h.div(
           [...group, h.Class('flex flex-col gap-3')],

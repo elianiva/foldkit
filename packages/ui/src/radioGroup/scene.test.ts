@@ -102,6 +102,35 @@ const group = Scene.role('radiogroup')
 const option = (index: number) => Scene.selector(`#${RADIO_ID}-option-${index}`)
 
 describe('RadioGroup', () => {
+  describe('descriptions', () => {
+    it('omits aria-describedby by default', () => {
+      Scene.scene(
+        { update, view: testView() },
+        Scene.given(nothingSelected),
+        Scene.expect(option(0)).not.toHaveAttr('aria-describedby'),
+        Scene.expect(option(1)).not.toHaveAttr('aria-describedby'),
+      )
+    })
+
+    it('references descriptions only for matching options', () => {
+      Scene.scene(
+        {
+          update,
+          view: testView({
+            hasOptionDescription: (_value, index) => index === 1,
+          }),
+        },
+        Scene.given(nothingSelected),
+        Scene.expect(option(0)).not.toHaveAttr('aria-describedby'),
+        Scene.expect(option(1)).toHaveAttr(
+          'aria-describedby',
+          `${RADIO_ID}-option-1-description`,
+        ),
+        Scene.expect(option(2)).not.toHaveAttr('aria-describedby'),
+      )
+    })
+  })
+
   describe('selection', () => {
     it('gives the first option a roving tabindex when nothing is selected', () => {
       Scene.scene(

@@ -267,7 +267,7 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
                   value: model.searchInput,
                   placeholder: 'Search by name or role...',
                   onInput: value => Message.ChangedSearchInput({ value }),
-                  toView: ({ input, label, description }) =>
+                  toView: ({ input, label }) =>
                     h.div(
                       [h.Class('flex-1')],
                       [
@@ -282,7 +282,6 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
                             'w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500',
                           ),
                         ]),
-                        h.span([...description]),
                       ],
                     ),
                 },

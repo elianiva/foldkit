@@ -57,6 +57,7 @@ const view = (model: Model, h: HtmlBuilder<Message>) =>
     model: model.dialog,
     view: Dialog.view,
     viewInputs: {
+      hasDescription: true,
       toView: ({
         dialog,
         backdrop,

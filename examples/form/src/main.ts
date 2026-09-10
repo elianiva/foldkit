@@ -299,6 +299,7 @@ const inputFieldView = (
       value: field.value,
       onInput: onUpdate,
       isInvalid: field._tag === 'Invalid',
+      hasDescription: field._tag === 'Validating' || field._tag === 'Invalid',
       type,
       toView: attributes =>
         h.div(
@@ -335,6 +336,7 @@ const textareaFieldView = (
       value: field.value,
       onInput: onUpdate,
       isInvalid: field._tag === 'Invalid',
+      hasDescription: field._tag === 'Validating' || field._tag === 'Invalid',
       toView: attributes =>
         h.div(
           [h.Class('mb-4')],

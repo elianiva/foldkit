@@ -44,6 +44,7 @@ const view = (model, h: HtmlBuilder<Message>) =>
     {
       id: 'notifications',
       isChecked: model.notificationsEnabled,
+      hasDescription: true,
       onToggle: isChecked => Message.ToggledNotifications({ isChecked }),
       toView: attributes =>
         h.div(

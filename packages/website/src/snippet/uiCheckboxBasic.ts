@@ -42,6 +42,7 @@ const view = (model, h: HtmlBuilder<Message>) =>
     {
       id: 'accept-terms',
       isChecked: model.acceptedTerms,
+      hasDescription: true,
       onToggle: isChecked => Message.ToggledTerms({ isChecked }),
       toView: attributes =>
         h.div(

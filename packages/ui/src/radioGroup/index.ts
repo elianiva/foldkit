@@ -195,6 +195,7 @@ export type ViewInputs<Value extends string = string> = Readonly<{
   toView: (render: RenderInfo<Value>) => Html
   orientation?: Orientation
   isOptionDisabled?: (value: Value, index: number) => boolean
+  hasOptionDescription?: (value: Value, index: number) => boolean
   isDisabled?: boolean
   isReadOnly?: boolean
   name?: string
@@ -210,6 +211,7 @@ const internalView = defineView<Model, Message, ViewInputs>(
       toView,
       orientation = 'Vertical',
       isOptionDisabled: isOptionDisabledFn,
+      hasOptionDescription: hasOptionDescriptionFn,
       isDisabled: isGroupDisabled = false,
       isReadOnly = false,
       name,
@@ -355,6 +357,11 @@ const internalView = defineView<Model, Message, ViewInputs>(
         const keyDownAttributes = isOptionDisabledNow
           ? []
           : [h.OnKeyDownPreventDefault(handleKeyDown(index))]
+        const describedByAttributes =
+          Predicate.isNotUndefined(hasOptionDescriptionFn) &&
+          hasOptionDescriptionFn(value, index)
+            ? [h.AriaDescribedBy(descriptionId(id, index))]
+            : []
 
         const optionAttributes = [
           h.Id(optionId(id, index)),
@@ -362,7 +369,7 @@ const internalView = defineView<Model, Message, ViewInputs>(
           h.Role('radio'),
           h.AriaChecked(isSelected),
           h.AriaLabelledBy(labelId(id, index)),
-          h.AriaDescribedBy(descriptionId(id, index)),
+          ...describedByAttributes,
           h.Tabindex(isActive ? 0 : -1),
           ...checkedAttributes,
           ...activeAttributes,
