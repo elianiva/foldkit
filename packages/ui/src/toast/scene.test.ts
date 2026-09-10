@@ -31,6 +31,8 @@ const makeSettledEntry = (overrides: Partial<Entry> = {}): Entry => ({
   maybeDuration: Option.some(Duration.seconds(4)),
   pendingDismissVersion: 0,
   isHovered: false,
+  swipeState: SwipeState.Idle(),
+  swipeVersion: 0,
   payload: { body: 'Hello' },
   ...overrides,
 })
@@ -62,6 +64,8 @@ const container = Scene.selector('[key="test"]')
 const entryZero = Scene.selector('[key="test-entry-0"]')
 
 const STALE_VERSION = -1
+
+const POINTER_ID = 0
 
 // Swipe version after one press and one release: each gesture transition
 // bumps it, so the settle timer scheduled by that release carries 2.
@@ -188,14 +192,13 @@ describe('Toast', () => {
     })
 
     it('adds data-swipe=move and translate offset when dragging', () => {
-      const model: Model = {
-        ...withEntry(),
+      const model: Model = withEntry({
         swipeState: SwipeState.Dragging({
-          entryId: 'test-entry-0',
+          pointerId: POINTER_ID,
           startX: 100,
           currentX: 180,
         }),
-      }
+      })
       Scene.scene(
         { update: Toast.update, view: sceneView() },
         Scene.given(model),
@@ -244,11 +247,17 @@ describe('Toast', () => {
         Scene.pointerDown(entryZero, { clientX: 100 }),
         Scene.expect(entryZero).toHaveAttr('data-swipe', 'move'),
         Scene.Subscription.emit(
-          Toast.Message.MovedSwipePointer({ clientX: 200 }),
+          Toast.Message.MovedSwipePointer({
+            pointerId: POINTER_ID,
+            clientX: 200,
+          }),
         ),
         Scene.expect(entryZero).toHaveStyle('translate', '100px'),
         Scene.Subscription.emit(
-          Toast.Message.ReleasedSwipePointer({ clientX: 200 }),
+          Toast.Message.ReleasedSwipePointer({
+            pointerId: POINTER_ID,
+            clientX: 200,
+          }),
         ),
         Scene.expect(entryZero).toHaveAttr('data-swipe', 'settling'),
         Scene.expect(entryZero).toHaveStyle('translate', '100px'),
@@ -271,10 +280,16 @@ describe('Toast', () => {
         Scene.given(withEntry()),
         Scene.pointerDown(entryZero, { clientX: 100 }),
         Scene.Subscription.emit(
-          Toast.Message.MovedSwipePointer({ clientX: 130 }),
+          Toast.Message.MovedSwipePointer({
+            pointerId: POINTER_ID,
+            clientX: 130,
+          }),
         ),
         Scene.Subscription.emit(
-          Toast.Message.ReleasedSwipePointer({ clientX: 130 }),
+          Toast.Message.ReleasedSwipePointer({
+            pointerId: POINTER_ID,
+            clientX: 130,
+          }),
         ),
         Scene.expect(entryZero).toHaveAttr('data-swipe', 'settling'),
         Scene.expect(entryZero).not.toHaveStyle('translate'),
