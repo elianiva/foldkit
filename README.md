@@ -29,7 +29,7 @@ A Foldkit program can own the whole page or run as a widget inside an existing a
 
 ## Get Started
 
-`create-foldkit-app` scaffolds a complete setup with Tailwind, TypeScript, [Oxlint](https://foldkit.dev/tooling/oxlint-plugin), Oxfmt, and the Vite plugin for state-preserving HMR. Pick a rendering mode (browser-only SPA, static generation, or server rendering) and, for a SPA, the example to start from.
+`create-foldkit-app` scaffolds a complete setup with Tailwind, TypeScript, [Oxlint](https://foldkit.dev/tooling/oxlint-plugin), Oxfmt, and the Vite plugin for state-preserving live reload. Pick a rendering mode (browser-only SPA, static generation, or server rendering) and, for a SPA, the example to start from.
 
 ```bash
 npx create-foldkit-app@latest
@@ -137,7 +137,7 @@ Routing, server rendering, UI components, composition, and browser lifecycles al
 - **Story Testing**: Exercise the update function directly, resolving Commands inline. No mocks, no fake timers.
 - **Scene Testing**: Drive your real view the way a user does, with accessible locators. No browser required.
 - **Slow Warnings**: Development warnings when update, view, patch, or Subscription extraction exceeds its budget.
-- **HMR**: Vite plugin with state-preserving hot module replacement. Change your view, keep your state.
+- **Live Reload**: Vite plugin with state-preserving reloads. Save a file, the page reloads, and your Model is restored. Change your view, keep your state.
 
 ## AI-Assisted Development
 

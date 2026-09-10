@@ -242,7 +242,7 @@ describe('hydrating boot', () => {
     expect(document.getElementById('count')?.textContent).toBe('5')
   })
 
-  it('validates the flags payload before applying an HMR-restored Model', async () => {
+  it('validates the flags payload before applying a Model restored after a development reload', async () => {
     await renderServerPage({ start: 5 })
     const payloadScript = document.querySelector('script[data-foldkit-flags]')
     expect(payloadScript).not.toBeNull()
@@ -297,7 +297,7 @@ describe('hydrating boot', () => {
     expect(document.getElementById('count')?.textContent).toBe('5')
   })
 
-  it('prefers an HMR-restored Model over hydration', async () => {
+  it('prefers a Model restored after a development reload over hydration', async () => {
     await renderServerPage({ start: 5 })
     const serverCount = document.getElementById('count')
     const application = makeClientApplication()
@@ -710,7 +710,9 @@ describe('hydrating boot', () => {
       const servedRoot = document.querySelector('[data-foldkit-app]')
       const application = makeClientApplication()
       const runtimeLog = vi.spyOn(console, 'log').mockImplementation(() => {})
-      const hmrWarning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const pluginWarning = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => {})
 
       try {
         expect(() =>
@@ -719,7 +721,7 @@ describe('hydrating boot', () => {
         await vi.waitFor(() => expectContained(servedRoot))
       } finally {
         runtimeLog.mockRestore()
-        hmrWarning.mockRestore()
+        pluginWarning.mockRestore()
       }
     },
   )
@@ -757,7 +759,7 @@ describe('hydrating boot', () => {
       container: nullContainer(),
     })
     const runtimeLog = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const hmrWarning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const pluginWarning = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     try {
       hydrateUnchecked(application, [{ buildId: null }])
@@ -765,7 +767,7 @@ describe('hydrating boot', () => {
       expect(initAttempts).toEqual([])
     } finally {
       runtimeLog.mockRestore()
-      hmrWarning.mockRestore()
+      pluginWarning.mockRestore()
     }
   })
 

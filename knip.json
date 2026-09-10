@@ -25,7 +25,7 @@
         "src/html/public.ts",
         "src/devTools/public.ts",
         "src/devTools/host.ts",
-        "src/runtime/hmrProtocolPublic.ts",
+        "src/runtime/modelPreservationPublic.ts",
         "src/scene/public.ts",
         "src/story/public.ts",
         "src/test/public.ts",
@@ -83,7 +83,11 @@
     "examples/ssr": {
       "entry": ["src/entry.server.ts"],
       "ignoreFiles": ["vite.config.playground.ts"],
-      "ignoreDependencies": ["@foldkit/devtools", "tailwindcss"]
+      "ignoreDependencies": [
+        "@effect/platform-node-shared",
+        "@foldkit/devtools",
+        "tailwindcss"
+      ]
     },
     "examples/ssg": {
       "entry": ["src/entry.server.ts"],

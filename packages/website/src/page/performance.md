@@ -62,7 +62,7 @@ The dev server runs several systems that production builds strip entirely:
 - [Freeze Model](/core/freeze-model) deep-freezes the Model after every update to catch accidental mutation at the write site.
 - [DevTools](/core/devtools) records each Message with Model snapshots and diffs for time travel.
 - The [Slow Warnings](/core/slow-warnings) can time update, subscriptions, view, and patch work against phase budgets.
-- HMR Model preservation encodes the Model so state survives hot reloads.
+- Model preservation encodes the Model so state survives development reloads.
 
 All of it is gated behind `import.meta.hot` and eliminated from production bundles. The consequence: judge performance with a production build. An animation-heavy app dispatching Messages at 60Hz pays the dev-mode systems on every single update, so the dev server systematically understates how the deployed app performs. If DevTools is enabled, use `excludeFromHistory` to skip history recording for high-frequency Messages like frame ticks and pointer moves.
 

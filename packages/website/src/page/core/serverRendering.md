@@ -103,11 +103,11 @@ Foldkit rejects extra top-level content, ambiguous handoff markers, and source t
 
 ### Application ownership
 
-`runtimeId` pairs one hydratable root with its Flags payload. It also keys the Model and scroll position preserved by hot reloading. A nondefault id changes that pairing. It does not create another document owner.
+`runtimeId` pairs one hydratable root with its Flags payload. It also keys the preserved Model and scroll position. A nondefault id changes that pairing. It does not create another document owner.
 
 A document may contain one hydratable Foldkit root. `injectIntoTemplate` refuses to insert a hydratable render when the template already contains one, even when the ids differ. `Runtime.hydrate` refuses and contains a page assembled elsewhere when it finds more than one stamped root. An explicit container does not override this rule.
 
-Two roots with the same id would also read the same Flags and preserved HMR state. Foldkit reports that collision specifically, but distinct ids do not make multiple page-owning applications valid.
+Two roots with the same id would also read the same Flags and share Model and scroll preservation. Foldkit reports that collision specifically, but distinct ids do not make multiple page-owning applications valid.
 
 The root stamp must have a nonempty id and name the document's single stamped root in the body light DOM. A requested root in `<head>`, a shadow tree, a detached subtree, or another document is refused and the page is contained before startup. When the configured container resolves to an element, it must be that root or one of its descendants.
 
@@ -212,7 +212,7 @@ In development, enable the Vite host in `vite.config.ts`:
 
 Vite continues to serve the client entry, HMR, and assets. Requests that reach Foldkit become Web `Request` values and pass to `renderPage`. The returned Web `Response` provides the status, headers, and body.
 
-A hot update does not exercise hydration. HMR preserves the Model but rebuilds the DOM under the root. That DOM came from code that predates the edit. Reload the page to test hydration itself. The stamped root remains required during a hot update; without it, startup fails as it would on a fresh load.
+A development reload does not exercise hydration. Foldkit restores the Model but rebuilds the DOM under the root. That DOM came from code that predates the edit. Refresh the page manually to test hydration itself. The stamped root remains required during a development reload; without it, startup fails as it would on a fresh load.
 
 In production, the host is built alongside the client. Set `ssr.build` in the plugin and `vite build` produces both. The server bundle is a Web `fetch` handler: Node and Workers both run it. Static files stay the platform's job. The [SSR example](https://github.com/foldkit/foldkit/tree/main/examples/ssr) starts that handler on Node:
 

@@ -209,7 +209,7 @@ SucceededUpdateNote: ({ note }) =>
 When the initial Model needs data from a side effect (current time, localStorage, browser APIs), use Flags, not module-level constants:
 
 ```ts
-// WRONG: module-level side effect (stale on HMR, non-deterministic, untestable)
+// WRONG: module-level side effect (non-deterministic and untestable)
 const now = Date.now()
 const init = () => ({ model: { createdAt: now } })
 

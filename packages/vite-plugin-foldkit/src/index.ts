@@ -30,7 +30,7 @@ import {
   PreserveModelMessage,
   RequestModelMessage,
   RestoreModelMessage,
-} from 'foldkit/hmr-protocol'
+} from 'foldkit/model-preservation'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import type {
@@ -222,7 +222,7 @@ const Event = Data.taggedEnum<Event>()
 
 type PreservedEntry = Readonly<{
   model: unknown
-  isHmrReload: boolean
+  isReloadFlush: boolean
 }>
 
 type State = Readonly<{
@@ -271,18 +271,18 @@ const handlePreserveModelReceived = (state: State, payload: unknown) =>
   Exit.match(Schema.decodeUnknownExit(PreserveModelMessage)(payload), {
     onFailure: error =>
       Console.warn(
-        '[foldkit:hmr] failed to decode preserve-model payload',
+        '[foldkit:preserve] failed to decode preserve-model payload',
         error,
       ),
-    onSuccess: ({ id, model, isHmrReload }) =>
+    onSuccess: ({ id, model, isReloadFlush }) =>
       Ref.update(state.preservedModels, current => {
         const existingFlag = Option.exists(
           HashMap.get(current, id),
-          ({ isHmrReload }) => isHmrReload,
+          ({ isReloadFlush }) => isReloadFlush,
         )
         const entry: PreservedEntry = {
           model,
-          isHmrReload: isHmrReload === true || existingFlag,
+          isReloadFlush: isReloadFlush === true || existingFlag,
         }
         return HashMap.set(current, id, entry)
       }),
@@ -296,7 +296,7 @@ const handleRequestModelReceived = (
   Exit.match(Schema.decodeUnknownExit(RequestModelMessage)(payload), {
     onFailure: error =>
       Console.warn(
-        '[foldkit:hmr] failed to decode request-model payload',
+        '[foldkit:preserve] failed to decode request-model payload',
         error,
       ),
     onSuccess: ({ id }) =>
@@ -314,8 +314,8 @@ const handleRequestModelReceived = (
         yield* Option.match(HashMap.get(current, id), {
           onNone: () => sendRestore(undefined),
           onSome: entry => {
-            if (entry.isHmrReload) {
-              const served: PreservedEntry = { ...entry, isHmrReload: false }
+            if (entry.isReloadFlush) {
+              const served: PreservedEntry = { ...entry, isReloadFlush: false }
               return Ref.update(
                 state.preservedModels,
                 HashMap.set(id, served),
@@ -331,7 +331,7 @@ const handleRequestModelReceived = (
 
 const handleHotUpdateFired = (state: State) =>
   Ref.update(state.preservedModels, current =>
-    HashMap.map(current, entry => ({ ...entry, isHmrReload: true })),
+    HashMap.map(current, entry => ({ ...entry, isReloadFlush: true })),
   )
 
 const handleBrowserEventFrameReceived = (
@@ -695,7 +695,7 @@ const main = (
     yield* registerViteWsHandlers(server, state, enqueue)
 
     // NOTE: Forked rather than awaited because binding the relay can retry for
-    // seconds. The HMR bridge is independent of the relay, and the runtime
+    // seconds. Model preservation is independent of the relay, and the runtime
     // gives up on its boot-time model request in well under a second, so
     // sequencing the dispatch loop behind the bind would cost model
     // preservation whenever the port is contended.
@@ -712,8 +712,8 @@ const main = (
 
 /**
  * Foldkit's Vite plugin set: the view-identity branding transform and
- * DevTools overlay injection (dev and build), plus the HMR bridge with state
- * preservation and the optional DevTools MCP relay (dev only). Returned as
+ * DevTools overlay injection (dev and build), plus Model preservation across
+ * reloads and the optional DevTools MCP relay (dev only). Returned as
  * an array; Vite flattens nested plugin arrays, so `plugins: [foldkit()]`
  * keeps working.
  */
@@ -762,8 +762,8 @@ export const foldkit = (options: FoldkitPluginOptions = {}): Array<Plugin> => {
       }
     })
 
-  const hmrPlugin: Plugin = {
-    name: 'foldkit-hmr',
+  const reloadPlugin: Plugin = {
+    name: 'foldkit',
     apply: 'serve',
     config: userConfig => ({
       optimizeDeps: {
@@ -806,7 +806,7 @@ export const foldkit = (options: FoldkitPluginOptions = {}): Array<Plugin> => {
     foldkitBuildToken(options.buildId),
     foldkitViewIdentity(),
     devToolsOverlayPlugin(),
-    hmrPlugin,
+    reloadPlugin,
   ]
 
   if (options.ssr === undefined) {

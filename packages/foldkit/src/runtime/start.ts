@@ -11,13 +11,13 @@ import {
 
 import type { Ports } from '../port/index.js'
 import { provideBrowserScheduler } from './browserScheduler.js'
-import { resolveHmrModel } from './hmrModelBridge.js'
 import {
   type EmbedHandle,
   buildPortHandles,
   makeHostConnector,
 } from './hostConnector.js'
 import type { BootMode } from './hydrationHandoff.js'
+import { resolvePreservedModel } from './modelPreservationBridge.js'
 import { type MakeRuntimeReturn, runtimeInternals } from './runtime.js'
 
 /** Client-only startup input for an application that declares Flags. Pass it
@@ -30,7 +30,7 @@ export type RunOptions<Flags, Resources = never> = Readonly<{
 
 type RuntimeProgram = Readonly<{
   runtimeId: string
-  start: (hmrModel?: unknown) => Effect.Effect<void>
+  start: (preservedModel?: unknown) => Effect.Effect<void>
   ports: Ports | undefined
 }>
 
@@ -38,7 +38,7 @@ type RuntimeProgram = Readonly<{
  * @internal */
 export const __startProgram = (
   program: RuntimeProgram,
-  hmrModel: unknown,
+  preservedModel: unknown,
   bootMode: BootMode,
   flags?: Effect.Effect<unknown, never, any>,
   buildId?: string,
@@ -62,7 +62,13 @@ export const __startProgram = (
     )
   }
 
-  return internals.startWith(Option.none(), hmrModel, bootMode, flags, buildId)
+  return internals.startWith(
+    Option.none(),
+    preservedModel,
+    bootMode,
+    flags,
+    buildId,
+  )
 }
 
 // NOTE: deliberately not `BrowserRuntime.runMain`, which interrupts the
@@ -105,8 +111,10 @@ const startProgram = (
   runMainWithoutUnloadInterrupt(
     withUnhandledCauseReporting(
       provideBrowserScheduler(
-        Effect.flatMap(resolveHmrModel(program.runtimeId), hmrModel =>
-          __startProgram(program, hmrModel, bootMode, flags, buildId),
+        Effect.flatMap(
+          resolvePreservedModel(program.runtimeId),
+          preservedModel =>
+            __startProgram(program, preservedModel, bootMode, flags, buildId),
         ),
       ),
     ),
@@ -115,10 +123,10 @@ const startProgram = (
 }
 
 /** Starts a Foldkit runtime that owns the page for the page's whole lifetime,
- *  with HMR support for development. The first render builds the DOM fresh in
- *  the container, replacing whatever is there. On a server-rendered page use
- *  `hydrate` instead, which adopts the existing DOM. To start a runtime under a
- *  host-controlled lifecycle, use `embed`. */
+ *  with state-preserving live reload for development. The first render builds
+ *  the DOM fresh in the container, replacing whatever is there. On a
+ *  server-rendered page use `hydrate` instead, which adopts the existing DOM.
+ *  To start a runtime under a host-controlled lifecycle, use `embed`. */
 export function run<
   P extends Ports | undefined,
   Resources,
@@ -258,11 +266,11 @@ export function embed<P extends Ports | undefined = undefined>(
       onNone: () => Effect.void,
       onSome: previousFiber => Effect.asVoid(Fiber.await(previousFiber)),
     }),
-    Effect.andThen(resolveHmrModel(program.runtimeId)),
-    Effect.flatMap(hmrModel =>
+    Effect.andThen(resolvePreservedModel(program.runtimeId)),
+    Effect.flatMap(preservedModel =>
       internals.startWith(
         Option.some(connector),
-        hmrModel,
+        preservedModel,
         'Fresh',
         options?.flags,
       ),

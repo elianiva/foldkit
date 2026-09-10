@@ -1122,7 +1122,7 @@ export type ApplicationConfig<Model, Message> = Readonly<{
 
 // Shared by both render shapes. `runtimeId` names the application in the root
 // stamp and Flags payload; it defaults to `'app'` and must be non-empty. It
-// also keys the Model and scroll position hot reloading preserves. A document
+// also keys the preserved Model and scroll position. A document
 // may contain one hydratable root. Template injection and hydration refuse a
 // second root whether it carries the same id or a distinct one because runtime
 // ids do not divide ownership of document metadata and navigation listeners.
@@ -1163,8 +1163,9 @@ export type StaticRenderOptions = CommonRenderOptions &
 
 /** Options for {@link renderToString}. `runtimeId` names the application in the
  *  root stamp and Flags payload; it defaults to `'app'` and must be non-empty.
- *  A nondefault `runtimeId` changes the root, Flags, and HMR pairing. It does
- *  not permit a second hydratable application in one document.
+ *  A nondefault `runtimeId` changes the root stamp and the keys used for Flags,
+ *  Model, and scroll preservation. It does not permit a second hydratable
+ *  application in one document.
  *
  *  A hydratable render (the default) requires `buildId`. Pass
  *  `isHydratable: false` for static markup that nothing will hydrate, which

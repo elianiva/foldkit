@@ -1,10 +1,10 @@
 import { Schema } from 'effect'
 
-/** Browser → plugin: the runtime preserves its current Model under a stable id so it can be restored after a full reload. `isHmrReload` is set by the runtime when flushing on `vite:beforeFullReload` to mark the entry as eligible for restoration; absent or `false` for ordinary debounced preserves. */
+/** Browser → plugin: the runtime preserves its current Model under a stable id so it can be restored after a full reload. `isReloadFlush` is set by the runtime when flushing on `vite:beforeFullReload` to mark the entry as eligible for restoration; absent or `false` for ordinary debounced preserves. */
 export const PreserveModelMessage = Schema.Struct({
   id: Schema.String,
   model: Schema.Unknown,
-  isHmrReload: Schema.optional(Schema.Boolean),
+  isReloadFlush: Schema.optional(Schema.Boolean),
 })
 /** Browser → plugin: the runtime preserves its current Model under a stable id. */
 export type PreserveModelMessage = typeof PreserveModelMessage.Type
