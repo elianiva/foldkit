@@ -84,6 +84,24 @@ Rejects Command structs assembled by hand. Command.define attaches the identity,
 
 ::Snippet{name="lintNoHandRolledCommandStruct" label="foldkit/no-hand-rolled-command-struct example"}
 
+## Commands and Effects {#command-effect-rules}
+
+### foldkit/acquire-release-constructs-in-acquire-body {#acquire-release-constructs-in-acquire-body}
+
+Requires the acquire Effect passed to `Effect.acquireRelease` to construct its resource lazily. Returning a handle captured from an outer binding, or wrapping an eagerly constructed resource in `Effect.succeed`, leaves a window where interruption can leak the resource before its release action is registered.
+
+The Effect type tracks the resource value, failure, and requirements, but not whether the resource was constructed before the acquire Effect began. That timing distinction cannot be enforced by the `Effect.acquireRelease` API or TypeScript alone, so the lint rule checks the construction shape.
+
+::Snippet{name="lintAcquireReleaseConstructsInAcquireBody" label="foldkit/acquire-release-constructs-in-acquire-body example"}
+
+### foldkit/prefer-command-mapmessage {#prefer-command-mapmessage}
+
+Lifts a Command result Message with `Command.mapMessage` or `Command.mapMessages`, not by mapping the Effect inside `Command.mapEffect`. Mapping the Effect dispatches correctly in production but records nothing on the message-mapping chain, so Story and Scene `resolve` see the raw child Message.
+
+`Command.mapEffect` is appropriate when the result Message stays the same and the Effect's execution changes, such as providing a service, adding retry or delay behavior, or changing its error or requirement channel. Its type preserves the result Message; use the Message-specific helpers when the result itself changes.
+
+::Snippet{name="lintPreferCommandMapmessage" label="foldkit/prefer-command-mapmessage example"}
+
 ## Model Updates {#model-update-rules}
 
 ### foldkit/no-empty-commands-array {#no-empty-commands-array}
@@ -102,6 +120,20 @@ Rejects object spreads inside an evo updater. Evolve nested fields with a nested
 
 ::Snippet{name="lintNoSpreadInEvo" label="foldkit/no-spread-in-evo example"}
 
+## State Modeling {#state-modeling-rules}
+
+### foldkit/no-switch-on-message-tag {#no-switch-on-message-tag}
+
+Rejects a `switch` on a Message or state `_tag`. Use the tagged union’s `match` helper for exhaustive dispatch, or Effect `Match` when the union has no matcher, so adding a variant produces a type error instead of a silent fall-through. Matchers are also the idiomatic Foldkit form: they organize behavior around named variants and keep low-level `_tag` branching out of application logic.
+
+::Snippet{name="lintNoSwitchOnMessageTag" label="foldkit/no-switch-on-message-tag example"}
+
+### foldkit/prefer-option-over-nullable-in-model {#prefer-option-over-nullable-in-model}
+
+Requires a direct field in the `Model` Schema to represent absence with `Schema.Option`, not a nullable, undefined, or optional Schema field. The rule stays scoped to `const Model = Schema.Struct({...})`, leaving wire and API Schemas free to preserve nullable input formats.
+
+::Snippet{name="lintPreferOptionOverNullableInModel" label="foldkit/prefer-option-over-nullable-in-model example"}
+
 ## Routing {#routing-rules}
 
 ### foldkit/no-hardcoded-route-strings {#no-hardcoded-route-strings}
@@ -109,6 +141,12 @@ Rejects object spreads inside an evo updater. Evolve nested fields with a nested
 Rejects hardcoded path and URL strings passed to link and navigation helpers. Build them from the Route module so they stay in sync with the routes.
 
 ::Snippet{name="lintNoHardcodedRouteStrings" label="foldkit/no-hardcoded-route-strings example"}
+
+### foldkit/no-route-query-constructor-default {#no-route-query-constructor-default}
+
+Rejects `Schema.withConstructorDefault` inside `Route.query`. Constructor defaults run only when a Schema constructs a value with `make`; route query parameters are decoded and encoded, so the annotation does not supply a default for a missing parameter. Use `Schema.withDecodingDefaultKey` when an absent key should decode to a value, or `Schema.OptionFromOptional` when absence belongs in the Route.
+
+::Snippet{name="lintNoRouteQueryConstructorDefault" label="foldkit/no-route-query-constructor-default example"}
 
 ## View Keying and Accessibility {#view-rules}
 
@@ -143,6 +181,16 @@ Catches an inline empty array in the children slot, on element builders and on k
 ::Snippet{name="lintNoEmptyChildrenArray" label="foldkit/no-empty-children-array example"}
 
 ## Purity Boundaries {#purity-rules}
+
+### foldkit/no-prevent-default-in-stream-operator {#no-prevent-default-in-stream-operator}
+
+Flags `preventDefault()` inside callbacks passed to `Stream.map`, `Stream.mapEffect`, `Stream.filterMap`, `Stream.filterMapEffect`, `Stream.filter`, `Stream.filterEffect`, or `Stream.tap`. A DOM event placed into a callback-backed Stream is queued before downstream operators run, so cancellation there happens after the native listener returns and may be too late for the browser.
+
+Use `Subscription.fromEventFilterMapPreventDefault` instead. Its mapper returns `Option.some(message)` for a handled event or `Option.none()` for an event the browser should handle normally. Foldkit calls `preventDefault()` for handled events before the native listener returns.
+
+The rule recognizes inline callbacks and functions declared in the same module. It is intentionally conservative about the Stream's source. Suppress it when the value is not a DOM event or the Stream is deliberately executed synchronously inside a native listener.
+
+::Snippet{name="lintNoPreventDefaultInStreamOperator" label="foldkit/no-prevent-default-in-stream-operator example"}
 
 ### foldkit/no-impure-call-at-decision-time {#no-impure-call-at-decision-time}
 

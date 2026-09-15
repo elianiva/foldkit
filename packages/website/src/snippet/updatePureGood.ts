@@ -1,6 +1,5 @@
 import { Effect } from 'effect'
-import { Command, type Update } from 'foldkit'
-import * as Dom from 'foldkit/dom'
+import { Command, Dom, type Update } from 'foldkit'
 import { evo } from 'foldkit/struct'
 
 import { Message } from './message'
