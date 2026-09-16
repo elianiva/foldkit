@@ -85,6 +85,31 @@ describe('server-rendered example build scripts', () => {
     expect(manifest.devDependencies).toHaveProperty('vite')
   })
 
+  it('uses the LiveStore Vite config in its playground', async () => {
+    const bySlug = await loadPlaygroundFiles()
+    const liveStoreEntry = Object.entries(bySlug).find(
+      ([slug]) => slug === 'livestore',
+    )
+    if (liveStoreEntry === undefined) {
+      throw new Error('the transformed playground files omit livestore')
+    }
+    const [, liveStore] = liveStoreEntry
+
+    const viteConfigFile = Object.entries(liveStore.files).find(
+      ([path]) => path === 'vite.config.ts',
+    )
+    if (viteConfigFile === undefined) {
+      throw new Error(
+        'the transformed livestore playground omits vite.config.ts',
+      )
+    }
+    const [, viteConfig] = viteConfigFile
+
+    expect(viteConfig).toBe(
+      exampleFile('livestore', 'vite.config.playground.ts'),
+    )
+  })
+
   it('pins every transformed workspace dependency to its exact version', async () => {
     const [bySlug, versions] = await Promise.all([
       loadPlaygroundFiles(),
