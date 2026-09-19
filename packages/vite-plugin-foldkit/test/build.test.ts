@@ -88,12 +88,31 @@ describe('foldkitBuild', () => {
     const { client, server } = await buildFixture('both')
 
     expect(await filesUnder(server)).toEqual(['fetch.js', 'foldkit.build.json'])
-    expect(await filesUnder(client)).toContain('index.html')
+    expect(await filesUnder(client)).not.toContain('index.html')
 
     const { pathToFileURL } = await import('node:url')
     const built = await import(pathToFileURL(resolve(server, 'fetch.js')).href)
     expect(typeof built.default.fetch).toBe('function')
     expect(typeof built.renderPage).toBe('function')
+    expect(built).not.toHaveProperty('template')
+  })
+
+  it('keeps the template out of the browser build', async () => {
+    const { client, server } = await buildFixture('template-private', {
+      prerender: { paths: ['/about'] },
+    })
+
+    const files = await filesUnder(client)
+    expect(files).toContain('about/index.html')
+    expect(files).not.toContain('index.html')
+
+    const { pathToFileURL } = await import('node:url')
+    const built = await import(pathToFileURL(resolve(server, 'fetch.js')).href)
+    const response: Response = await built.default.fetch(
+      new Request('http://localhost/'),
+    )
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('>/</main>')
   })
 
   it('serves the Request.url the platform constructed', async () => {
@@ -145,21 +164,12 @@ describe('foldkitBuild', () => {
     ).toEqual(await readFile(resolve(first.client, 'index.html'), 'utf8'))
   })
 
-  // The generated `/` replaces the browser build's own `index.html`, so a build
-  // that read its template from that file would parse a page it generated on
-  // any second pass over one browser build. The template comes from the build
-  // result instead, which this pins by making the file on disk say something
-  // the build result does not: generation that reads the file produces pages
-  // carrying the corruption, generation that reads the build produces the
-  // pages below.
-  it('takes the template from the build rather than from the file it writes', async () => {
+  // NOTE: a later hook writes a different template to disk. Generation must
+  // use the template captured from Vite's bundle, not the disk file.
+  it('uses the captured template even when the disk index differs', async () => {
     const clientDir = 'dist-test/disk-template/client'
     const corruptClientIndex: Plugin = {
       name: 'test:corrupt-client-index',
-      // Both environment builds finish before pages are generated, so this
-      // needs no environment guard: whenever it runs, the file on disk is
-      // corrupt before generation reads anything.
-      //
       // NOTE: the marker is a meta element rather than the title, which
       // injection rewrites from the render's own Document. A corrupted title
       // is gone from the page it produced, so a test that watched the title
@@ -195,9 +205,7 @@ describe('foldkitBuild', () => {
 
     const files = await filesUnder(client)
     expect(files).toContain('about/index.html')
-    expect(await readFile(resolve(client, 'index.html'), 'utf8')).toContain(
-      '<div id="root"></div>',
-    )
+    expect(files).not.toContain('index.html')
   })
 
   // The fixture renders `url.pathname` into the page, so a request built by
@@ -235,9 +243,9 @@ describe('foldkitBuild', () => {
 
     expect(manifest.prerendered).toEqual(['/', '/about'])
     expect(manifest.serverEntry).toBe('fetch.js')
-    expect(manifest.host).toBe('fetch')
     expect(manifest.client).toContain('client')
     expect(manifest.server).toContain('server')
+    expect('host' in manifest).toBe(false)
   })
 
   it('reports no generated paths when the build generates none', async () => {
@@ -249,7 +257,6 @@ describe('foldkitBuild', () => {
 
     expect(manifest.prerendered).toEqual([])
     expect(manifest.serverEntry).toBe('fetch.js')
-    expect(manifest.host).toBe('fetch')
   })
 
   // The manifest describes the deployment, and the browser build is the part of
