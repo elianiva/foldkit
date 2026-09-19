@@ -124,7 +124,7 @@ export const subscriptions = Subscription.lift(Toast.subscriptions)<
 // In your view, embed Toast via h.submodel once at the app root. The
 // entryToView callback lays out each entry from its payload. The
 // component handles the <div> wrapper, hover-to-pause, swipe-to-dismiss
-// (pointerdown + data-swipe="move"/"settling" +
+// (pointerdown + data-swipe="move"/"settling"/"end" +
 // translate/--toast-swipe-move-x), and enter/leave animations.
 const view = (h: HtmlBuilder<Message>) =>
   h.submodel({
