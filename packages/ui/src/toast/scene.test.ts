@@ -1,7 +1,7 @@
 import { Duration, Option, Schema } from 'effect'
 import { type Html, type HtmlBuilder, inertHtml as ih } from 'foldkit/html'
 import * as Scene from 'foldkit/scene'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { describe, it } from '@effect/vitest'
 
@@ -60,8 +60,8 @@ const sceneView =
       h,
     )
 
-const container = Scene.selector('[key="test"]')
-const entryZero = Scene.selector('[key="test-entry-0"]')
+const container = Scene.selector('div[key="test"]')
+const entryZero = Scene.selector('div[key="test-entry-0"]')
 
 const STALE_VERSION = -1
 
@@ -70,13 +70,13 @@ const POINTER_ID = 0
 const RELEASED_SWIPE_VERSION = 2
 
 const withEntry = (overrides: Partial<Entry> = {}): Model =>
-  evo(Toast.init({ id: 'test', swipeToDismiss: {} }), {
+  modifyFields(Toast.init({ id: 'test', swipeToDismiss: {} }), {
     entries: () => [makeSettledEntry(overrides)],
     nextEntryKey: () => 1,
   })
 
 const withDisabledEntry = (overrides: Partial<Entry> = {}): Model =>
-  evo(Toast.init({ id: 'test' }), {
+  modifyFields(Toast.init({ id: 'test' }), {
     entries: () => [makeSettledEntry(overrides)],
     nextEntryKey: () => 1,
   })
@@ -127,13 +127,16 @@ describe('Toast', () => {
     })
 
     it('reflects the enter transition via data attributes', () => {
-      const enteringEntry: Entry = evo(makeSettledEntry(), {
+      const enteringEntry: Entry = modifyFields(makeSettledEntry(), {
         animation: () =>
-          evo(Animation.init({ id: 'test-entry-0', isShowing: true }), {
-            transitionState: () => 'EnterAnimating',
-          }),
+          modifyFields(
+            Animation.init({ id: 'test-entry-0', isShowing: true }),
+            {
+              transitionState: () => 'EnterAnimating',
+            },
+          ),
       })
-      const model: Model = evo(Toast.init({ id: 'test' }), {
+      const model: Model = modifyFields(Toast.init({ id: 'test' }), {
         entries: () => [enteringEntry],
         nextEntryKey: () => 1,
       })
@@ -146,13 +149,16 @@ describe('Toast', () => {
     })
 
     it('reflects the leave transition via data attributes', () => {
-      const leavingEntry: Entry = evo(makeSettledEntry(), {
+      const leavingEntry: Entry = modifyFields(makeSettledEntry(), {
         animation: () =>
-          evo(Animation.init({ id: 'test-entry-0', isShowing: false }), {
-            transitionState: () => 'LeaveAnimating',
-          }),
+          modifyFields(
+            Animation.init({ id: 'test-entry-0', isShowing: false }),
+            {
+              transitionState: () => 'LeaveAnimating',
+            },
+          ),
       })
-      const model: Model = evo(Toast.init({ id: 'test' }), {
+      const model: Model = modifyFields(Toast.init({ id: 'test' }), {
         entries: () => [leavingEntry],
         nextEntryKey: () => 1,
       })

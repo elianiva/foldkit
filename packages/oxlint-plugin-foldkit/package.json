@@ -1,6 +1,6 @@
 {
   "name": "@foldkit/oxlint-plugin",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Oxlint rules for Foldkit applications",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,7 +17,8 @@
   "scripts": {
     "clean": "rimraf dist recommended.json all.json *.tsbuildinfo",
     "build": "pnpm run clean && rolldown -c rolldown.config.ts && tsc -b tsconfig.build.json && node scripts/generate-presets.mjs",
-    "test": "vitest run",
+    "test": "pnpm run typecheck:real-oxlint-fixtures && vitest run",
+    "typecheck:real-oxlint-fixtures": "node scripts/typecheck-real-oxlint-fixtures.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

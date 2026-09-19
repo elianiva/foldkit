@@ -5,7 +5,7 @@ import { Option, Schema } from 'effect'
 import { Subscription, Update } from 'foldkit'
 import type { HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Toast as UiToast } from '@foldkit/ui'
 
@@ -61,7 +61,7 @@ const foldToastOutMessage = Toast.OutMessage.match<Update.Step<Model, Message>>(
     DismissedToast:
       ({ payload }) =>
       model => ({
-        model: evo(model, {
+        model: modifyFields(model, {
           maybeLastDismissedBody: () => Option.some(payload.bodyText),
         }),
       }),
@@ -75,7 +75,7 @@ const foldToastOutMessage = Toast.OutMessage.match<Update.Step<Model, Message>>(
 const foldToast = Update.foldChild({
   update: Toast.update,
   read: (model: Model) => Option.some(model.toast),
-  write: (model, nextToast) => evo(model, { toast: () => nextToast }),
+  write: (model, nextToast) => modifyFields(model, { toast: () => nextToast }),
   toParentMessage: message => Message.GotToastMessage({ message }),
   foldOutMessage: foldToastOutMessage,
 })
@@ -83,7 +83,7 @@ const foldToast = Update.foldChild({
 const foldToastShow = Update.foldChild({
   update: Toast.show,
   read: (model: Model) => Option.some(model.toast),
-  write: (model, nextToast) => evo(model, { toast: () => nextToast }),
+  write: (model, nextToast) => modifyFields(model, { toast: () => nextToast }),
   toParentMessage: message => Message.GotToastMessage({ message }),
   foldOutMessage: foldToastOutMessage,
 })
@@ -120,7 +120,7 @@ export const subscriptions = Subscription.lift(Toast.subscriptions)<
 
 // In your view, embed Toast via h.submodel once at the app root. The
 // entryToView callback lays out each entry from its payload. The
-// component handles the <li> wrapper, hover-to-pause, swipe-to-dismiss
+// component handles the <div> wrapper, hover-to-pause, swipe-to-dismiss
 // (pointerdown + data-swipe="move"/"settling" +
 // translate/--toast-swipe-move-x), and enter/leave animations.
 const view = (h: HtmlBuilder<Message>) =>

@@ -11,7 +11,7 @@ import {
   pipe,
 } from 'effect'
 import * as Command from 'foldkit/command'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import * as Subscription from 'foldkit/subscription'
 import * as Update from 'foldkit/update'
 
@@ -141,12 +141,12 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
     entryId: string,
     f: (entry: Entry) => Entry,
   ): Model =>
-    evo(model, {
+    modifyFields(model, {
       entries: Array.map(entry => (entry.id === entryId ? f(entry) : entry)),
     })
 
   const removeEntry = (model: Model, entryId: string): Model =>
-    evo(model, {
+    modifyFields(model, {
       entries: Array.filter(({ id }) => id !== entryId),
     })
 
@@ -227,7 +227,7 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
    *  discards the stale settle completion. */
   const settleSnapBack = (model: Model, entry: Entry): UpdateReturn => {
     const nextVersion = Number.increment(entry.swipeVersion)
-    const nextEntry = evo(entry, {
+    const nextEntry = modifyFields(entry, {
       pendingDismissVersion: Number.increment,
       swipeState: () => SwipeState.Settling({ offsetX: 0 }),
       swipeVersion: () => nextVersion,
@@ -254,7 +254,7 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
     (entryId: string) =>
     (model: Model, nextAnimation: Entry['animation']): Model =>
       updateEntry(model, entryId, entry =>
-        evo(entry, { animation: () => nextAnimation }),
+        modifyFields(entry, { animation: () => nextAnimation }),
       )
 
   const toGotAnimationMessage =
@@ -385,7 +385,7 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
       Added: ({ entry }) => {
         return Update.combine(model, [
           stepModel => ({
-            model: evo(stepModel, {
+            model: modifyFields(stepModel, {
               entries: entries => Array.append(entries, entry),
               nextEntryKey: Number.increment,
             }),
@@ -453,7 +453,7 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
 
       HoveredEntry: ({ entryId }) => ({
         model: updateEntry(model, entryId, entry =>
-          evo(entry, {
+          modifyFields(entry, {
             isHovered: () => true,
             pendingDismissVersion: Number.increment,
           }),
@@ -469,7 +469,7 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
         return Option.match(maybeEntry, {
           onNone: (): UpdateReturn => ({ model }),
           onSome: entry => {
-            const nextEntry: Entry = evo(entry, {
+            const nextEntry: Entry = modifyFields(entry, {
               isHovered: () => false,
               pendingDismissVersion: Number.increment,
             })
@@ -500,7 +500,7 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
             ) {
               return { model }
             } else {
-              const nextEntry = evo(entry, {
+              const nextEntry = modifyFields(entry, {
                 pendingDismissVersion: Number.increment,
                 swipeState: () =>
                   SwipeState.Dragging({
@@ -521,7 +521,7 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
           onNone: (): UpdateReturn => ({ model }),
           onSome: ({ entryId, startX }) => ({
             model: updateEntry(model, entryId, entry =>
-              evo(entry, {
+              modifyFields(entry, {
                 swipeState: () =>
                   SwipeState.Dragging({
                     pointerId,
@@ -549,7 +549,7 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
                 onSome: entry => {
                   if (Math.abs(offset) >= threshold) {
                     const nextVersion = Number.increment(entry.swipeVersion)
-                    const nextEntry = evo(entry, {
+                    const nextEntry = modifyFields(entry, {
                       swipeState: () =>
                         SwipeState.Settling({ offsetX: offset }),
                       swipeVersion: () => nextVersion,
@@ -598,7 +598,9 @@ export const makeRuntime = <A, I>(payloadSchema: Schema.Codec<A, I>) => {
               ) {
                 return {
                   model: updateEntry(model, entryId, current =>
-                    evo(current, { swipeState: () => SwipeState.Idle() }),
+                    modifyFields(current, {
+                      swipeState: () => SwipeState.Idle(),
+                    }),
                   ),
                 }
               } else {

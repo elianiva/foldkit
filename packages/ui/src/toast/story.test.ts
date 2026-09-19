@@ -1,6 +1,6 @@
 import { Array, Duration, Option, Schema } from 'effect'
 import * as Story from 'foldkit/story'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { expect } from 'vitest'
 
 import { describe, it } from '@effect/vitest'
@@ -62,7 +62,7 @@ const swipeInit = Toast.init({ id: 'test', swipeToDismiss: {} })
 const firstEntryId = 'test-entry-0'
 
 const withEntries = (model: Model, entries: ReadonlyArray<Entry>): Model =>
-  evo(model, {
+  modifyFields(model, {
     entries: () => entries,
     nextEntryKey: () => entries.length,
   })
@@ -187,7 +187,7 @@ describe('Toast', () => {
   describe('update', () => {
     describe('CompletedWaitBeforeDismissal', () => {
       it('ignores a stale version', () => {
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [makeSettledEntry()],
           nextEntryKey: () => 1,
         })
@@ -208,7 +208,7 @@ describe('Toast', () => {
       })
 
       it('starts the leave transition when the version matches', () => {
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [makeSettledEntry()],
           nextEntryKey: () => 1,
         })
@@ -253,7 +253,7 @@ describe('Toast', () => {
 
     describe('HoveredEntry / LeftEntry', () => {
       it('HoveredEntry flips isHovered true and bumps version to cancel the pending timer', () => {
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [makeSettledEntry()],
           nextEntryKey: () => 1,
         })
@@ -275,7 +275,7 @@ describe('Toast', () => {
           isHovered: true,
           pendingDismissVersion: 1,
         })
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [hoveredEntry],
           nextEntryKey: () => 1,
         })
@@ -304,7 +304,7 @@ describe('Toast', () => {
           maybeDuration: Option.none(),
           isHovered: true,
         })
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [stickyEntry],
           nextEntryKey: () => 1,
         })
@@ -317,7 +317,7 @@ describe('Toast', () => {
       })
 
       it('a hover arriving before the timer fires cancels the pending dismiss via version bump', () => {
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [makeSettledEntry()],
           nextEntryKey: () => 1,
         })
@@ -375,7 +375,7 @@ describe('Toast', () => {
 
     describe('Dismissed', () => {
       it('runs the full leave flow and removes the entry from the stack', () => {
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [makeSettledEntry()],
           nextEntryKey: () => 1,
         })
@@ -409,7 +409,7 @@ describe('Toast', () => {
             transitionState: 'LeaveAnimating',
           },
         })
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [leavingEntry],
           nextEntryKey: () => 1,
         })
@@ -432,7 +432,7 @@ describe('Toast', () => {
             transitionState: 'LeaveAnimating',
           },
         })
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [entry],
           nextEntryKey: () => 1,
         })
@@ -469,7 +469,7 @@ describe('Toast', () => {
             ...Animation.init({ id: 'test-entry-1', isShowing: true }),
           },
         })
-        const model: Model = evo(Toast.init({ id: 'test' }), {
+        const model: Model = modifyFields(Toast.init({ id: 'test' }), {
           entries: () => [entryOne, entryTwo],
           nextEntryKey: () => 2,
         })
@@ -1337,7 +1337,7 @@ describe('Toast', () => {
 
   describe('programmatic helpers', () => {
     it('dismiss(model, entryId) dispatches Dismissed', () => {
-      const model: Model = evo(Toast.init({ id: 'test' }), {
+      const model: Model = modifyFields(Toast.init({ id: 'test' }), {
         entries: () => [makeSettledEntry()],
         nextEntryKey: () => 1,
       })
@@ -1348,7 +1348,7 @@ describe('Toast', () => {
     })
 
     it('dismissAll(model) dispatches DismissedAll', () => {
-      const model: Model = evo(Toast.init({ id: 'test' }), {
+      const model: Model = modifyFields(Toast.init({ id: 'test' }), {
         entries: () => [
           makeSettledEntry({ id: 'test-entry-0' }),
           makeSettledEntry({ id: 'test-entry-1' }),

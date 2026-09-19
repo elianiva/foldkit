@@ -6,4 +6,4 @@ Add opt-in swipe-to-dismiss to `Toast`. Pass `swipeToDismiss` to `Toast.init` (`
 
 Separate entries can now drag at once. Each entry tracks its own pointer, so two fingers can dismiss two toasts at once, while a press that reuses an already-active pointer id stays ignored and `Escape` cancels every active drag.
 
-This changes the public Toast Model and Entry schemas. Consumers that construct them directly must add `maybeSwipeThreshold: Option.none()` to disabled Models and add `swipeState: SwipeState.Idle()` plus `swipeVersion: 0` to Entries. Consumers that create state through `Toast.init` and `Toast.show` require no migration.
+This changes the public Toast Model and Entry schemas and expands the Toast Message union. Consumers that construct state directly must add `maybeSwipeThreshold: Option.none()` to disabled Models and add `swipeState: SwipeState.Idle()` plus `swipeVersion: 0` to Entries. Exhaustive Message handlers must also handle the new pointer and settling Messages. Consumers that create state through `Toast.init` and `Toast.show` require no state migration.

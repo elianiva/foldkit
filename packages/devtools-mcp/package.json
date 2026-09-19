@@ -1,6 +1,6 @@
 {
   "name": "@foldkit/devtools-mcp",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "MCP server exposing Foldkit DevTools to AI agents (Claude Code, Cursor, etc.)",
   "type": "module",
   "main": "./dist/server.js",
@@ -24,7 +24,7 @@
   },
   "peerDependencies": {
     "effect": "4.0.0-rc.115",
-    "foldkit": ">=0.153.0"
+    "foldkit": ">=0.161.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
