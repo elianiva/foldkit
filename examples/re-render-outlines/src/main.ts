@@ -9,7 +9,7 @@ import {
   createLazy,
 } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 const Item = Schema.Struct({
   id: Schema.String,
@@ -72,32 +72,34 @@ const shuffleItemsWithSeed = (
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ToggledMemoization: ({ isMemoized }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         isMemoized: () => isMemoized,
       }),
     }),
     IncrementedTick: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         tick: tick => tick + 1,
       }),
     }),
     IncrementedCounter: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         counter: counter => counter + 1,
       }),
     }),
     IncrementedItem: ({ id }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         items: items =>
           Array.map(items, item =>
-            item.id === id ? evo(item, { value: value => value + 1 }) : item,
+            item.id === id
+              ? modifyFields(item, { value: value => value + 1 })
+              : item,
           ),
       }),
     }),
     AddedItem: () => {
       const nextId = `item-${model.items.length + 1}`
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           items: items => [
             ...items,
             { id: nextId, label: `Item ${items.length + 1}`, value: 0 },
@@ -106,7 +108,7 @@ export const update = (model: Model, message: Message) =>
       }
     },
     ShuffledItems: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         items: items => shuffleItemsWithSeed(items, model.tick + model.counter),
       }),
     }),
