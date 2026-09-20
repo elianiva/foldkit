@@ -1,10 +1,10 @@
 import { clsx } from 'clsx'
-import { Effect, Option, Schema as S } from 'effect'
+import { Effect, Option, Schema } from 'effect'
 import { Command, Runtime, Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { Url, toString as urlToString } from 'foldkit/url'
 
 import * as Markdown from '@foldkit/markdown'
@@ -18,7 +18,7 @@ export { AppRoute } from './route'
 
 // MODEL
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   route: Route.AppRoute,
   counter: Counter.Model,
 })
@@ -45,14 +45,14 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = (
 // COMMAND
 
 const NavigateInternal = Command.define('NavigateInternal', {
-  args: { url: S.String },
+  args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
   execute: ({ url }) =>
     pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 })
 
 const LoadExternal = Command.define('LoadExternal', {
-  args: { href: S.String },
+  args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
   execute: ({ href }) =>
     load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
@@ -65,7 +65,8 @@ type UpdateReturn = Update.Return<Model, Message>
 const foldCounter = Update.foldChild({
   update: Counter.update,
   read: (model: Model) => Option.some(model.counter),
-  write: (model, nextCounter) => evo(model, { counter: () => nextCounter }),
+  write: (model, nextCounter) =>
+    modifyFields(model, { counter: () => nextCounter }),
   toParentMessage: message => Message.GotCounterMessage({ message }),
 })
 
@@ -85,7 +86,7 @@ export const update = (model: Model, message: Message) =>
 
     ChangedUrl: ({ url }) => {
       const nextRoute = Route.urlToAppRoute(url)
-      return { model: evo(model, { route: () => nextRoute }) }
+      return { model: modifyFields(model, { route: () => nextRoute }) }
     },
 
     GotCounterMessage: ({ message }) => foldCounter(model, message),

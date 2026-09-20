@@ -6,17 +6,37 @@ Foldkit projects use `oxlint` for general linting and `@foldkit/oxlint-plugin` f
 
 ## Scaffolded Projects
 
-[Create Foldkit app](/get-started/getting-started) includes `.oxlintrc.json`, a `lint` script, `oxlint`, and `@foldkit/oxlint-plugin`. Generated projects extend the recommended Foldkit preset:
+[Create Foldkit app](/get-started) includes `.oxlintrc.json`, a `lint` script, `oxlint`, and `@foldkit/oxlint-plugin`. Generated projects extend the recommended Foldkit preset:
 
 ::Snippet{name="oxlintConfig" label="oxlint config"}
 
 Override an individual rule in the project's `rules` block when an application needs a narrower policy. The complete rule set is grouped by the part of the architecture it protects below.
 
+## Effect Imports
+
+### foldkit/prefer-effect-module-names {#prefer-effect-module-names}
+
+The recommended and all presets require PascalCase modules imported from `effect` to keep their exported names. Write `import { Match, Schema, String } from 'effect'`, not abbreviated or trailing-underscore aliases such as `Match as M`, `Schema as S`, or `String as String_`.
+
+When an Effect module shares a name with a JavaScript or TypeScript global, keep the Effect import unchanged and qualify the global through `globalThis`, such as `globalThis.String`, `globalThis.Array`, or `globalThis.Record`. If an existing local or public binding must retain the module name, give the Effect import an explicit prefix such as `Order as EffectOrder`. Aliases for lowercase functions and type-only imports remain valid.
+
+The rule safely fixes a binding and its references when the exported name is available. It reports without fixing when a rename could change binding resolution, compete with another alias for the same exported name, change an object shorthand key or named re-export, or discard a comment in the import specifier.
+
+Disable the rule when a project deliberately keeps Effect module aliases:
+
+```json
+{
+  "rules": {
+    "foldkit/prefer-effect-module-names": "off"
+  }
+}
+```
+
 ## Server Portability
 
 ### foldkit/no-nonportable-server-globals {#no-nonportable-server-globals}
 
-The recommended and all presets enable this rule in `entry.server.ts`, `entry.server.tsx`, TypeScript files under a `server` directory, and `prerender.ts`. Files ending in `.test.ts`, `.test.tsx`, `.spec.ts`, or `.spec.tsx` are excluded.
+The recommended and all presets enable this rule in `entry.server.ts`, `entry.server.tsx`, TypeScript files under a `server` directory, and `prerender.ts` or `prerender.tsx`. Files ending in `.test.ts`, `.test.tsx`, `.spec.ts`, or `.spec.tsx` are excluded.
 
 The rule catches direct runtime reads of common browser-only globals: `document`, `window`, `navigator`, `localStorage`, `sessionStorage`, `history`, `location`, `alert`, `confirm`, `prompt`, `requestAnimationFrame`, `cancelAnimationFrame`, `requestIdleCallback`, `cancelIdleCallback`, `getComputedStyle`, `matchMedia`, `customElements`, `screen`, `IntersectionObserver`, `ResizeObserver`, and `MutationObserver`. It also catches static property reads and destructuring from the global `globalThis` object.
 
@@ -64,6 +84,24 @@ Rejects Command structs assembled by hand. Command.define attaches the identity,
 
 ::Snippet{name="lintNoHandRolledCommandStruct" label="foldkit/no-hand-rolled-command-struct example"}
 
+## Commands and Effects {#command-effect-rules}
+
+### foldkit/acquire-release-constructs-in-acquire-body {#acquire-release-constructs-in-acquire-body}
+
+Requires the acquire Effect passed to `Effect.acquireRelease` to construct its resource lazily. Returning a handle captured from an outer binding, or wrapping an eagerly constructed resource in `Effect.succeed`, leaves a window where interruption can leak the resource before its release action is registered.
+
+The Effect type tracks the resource value, failure, and requirements, but not whether the resource was constructed before the acquire Effect began. That timing distinction cannot be enforced by the `Effect.acquireRelease` API or TypeScript alone, so the lint rule checks the construction shape.
+
+::Snippet{name="lintAcquireReleaseConstructsInAcquireBody" label="foldkit/acquire-release-constructs-in-acquire-body example"}
+
+### foldkit/prefer-command-mapmessage {#prefer-command-mapmessage}
+
+Lifts a Command result Message with `Command.mapMessage` or `Command.mapMessages`, not by mapping the Effect inside `Command.mapEffect`. Mapping the Effect dispatches correctly in production but records nothing on the message-mapping chain, so Story and Scene `resolve` see the raw child Message.
+
+`Command.mapEffect` is appropriate when the result Message stays the same and the Effect's execution changes, such as providing a service, adding retry or delay behavior, or changing its error or requirement channel. Its type preserves the result Message; use the Message-specific helpers when the result itself changes.
+
+::Snippet{name="lintPreferCommandMapmessage" label="foldkit/prefer-command-mapmessage example"}
+
 ## Model Updates {#model-update-rules}
 
 ### foldkit/no-empty-commands-array {#no-empty-commands-array}
@@ -76,11 +114,25 @@ This is a syntax-only rule. It flags any literal property named `commands`, even
 
 ::Snippet{name="lintNoEmptyCommandsArray" label="foldkit/no-empty-commands-array example"}
 
-### foldkit/no-spread-in-evo {#no-spread-in-evo}
+### foldkit/no-spread-in-modify-fields {#no-spread-in-modify-fields}
 
-Rejects object spreads inside an evo updater. Evolve nested fields with a nested evo instead.
+Rejects object spreads inside a modifyFields updater. Evolve nested fields with a nested modifyFields instead.
 
-::Snippet{name="lintNoSpreadInEvo" label="foldkit/no-spread-in-evo example"}
+::Snippet{name="lintNoSpreadInModifyFields" label="foldkit/no-spread-in-modify-fields example"}
+
+## State Modeling {#state-modeling-rules}
+
+### foldkit/no-switch-on-message-tag {#no-switch-on-message-tag}
+
+Rejects a `switch` on a Message or state `_tag`. Use the tagged union’s `match` helper for exhaustive dispatch, or Effect `Match` when the union has no matcher, so adding a variant produces a type error instead of a silent fall-through. Matchers are also the idiomatic Foldkit form: they organize behavior around named variants and keep low-level `_tag` branching out of application logic.
+
+::Snippet{name="lintNoSwitchOnMessageTag" label="foldkit/no-switch-on-message-tag example"}
+
+### foldkit/prefer-option-over-nullable-in-model {#prefer-option-over-nullable-in-model}
+
+Requires a direct field in the `Model` Schema to represent absence with `Schema.Option`, not a nullable, undefined, or optional Schema field. The rule stays scoped to `const Model = Schema.Struct({...})`, leaving wire and API Schemas free to preserve nullable input formats.
+
+::Snippet{name="lintPreferOptionOverNullableInModel" label="foldkit/prefer-option-over-nullable-in-model example"}
 
 ## Routing {#routing-rules}
 
@@ -89,6 +141,12 @@ Rejects object spreads inside an evo updater. Evolve nested fields with a nested
 Rejects hardcoded path and URL strings passed to link and navigation helpers. Build them from the Route module so they stay in sync with the routes.
 
 ::Snippet{name="lintNoHardcodedRouteStrings" label="foldkit/no-hardcoded-route-strings example"}
+
+### foldkit/no-route-query-constructor-default {#no-route-query-constructor-default}
+
+Rejects `Schema.withConstructorDefault` inside `Route.query`. Constructor defaults run only when a Schema constructs a value with `make`; route query parameters are decoded and encoded, so the annotation does not supply a default for a missing parameter. Use `Schema.withDecodingDefaultKey` when an absent key should decode to a value, or `Schema.OptionFromOptional` when absence belongs in the Route.
+
+::Snippet{name="lintNoRouteQueryConstructorDefault" label="foldkit/no-route-query-constructor-default example"}
 
 ## View Keying and Accessibility {#view-rules}
 
@@ -123,6 +181,48 @@ Catches an inline empty array in the children slot, on element builders and on k
 ::Snippet{name="lintNoEmptyChildrenArray" label="foldkit/no-empty-children-array example"}
 
 ## Purity Boundaries {#purity-rules}
+
+### foldkit/no-prevent-default-in-stream-operator {#no-prevent-default-in-stream-operator}
+
+Flags `preventDefault()` inside callbacks passed to `Stream.map`, `Stream.mapEffect`, `Stream.filterMap`, `Stream.filterMapEffect`, `Stream.filter`, `Stream.filterEffect`, or `Stream.tap`. A DOM event placed into a callback-backed Stream is queued before downstream operators run, so cancellation there happens after the native listener returns and may be too late for the browser.
+
+Use `Subscription.fromEventFilterMapPreventDefault` instead. Its `filterMapEvent` mapper returns `Option.some(value)` for a handled event or `Option.none()` for an event the browser should handle normally. Foldkit calls `preventDefault()` for handled events before the native listener returns.
+
+The rule recognizes inline callbacks and functions declared in the same module. It is intentionally conservative about the Stream's source. Suppress it when the value is not a DOM event or the Stream is deliberately executed synchronously inside a native listener.
+
+::Snippet{name="lintNoPreventDefaultInStreamOperator" label="foldkit/no-prevent-default-in-stream-operator example"}
+
+### foldkit/no-impure-call-at-decision-time {#no-impure-call-at-decision-time}
+
+Flags these direct calls unless they appear inside a recognized callback that Effect or a Foldkit lifecycle primitive defers until execution:
+
+- `Date.now()`
+- `Date()` (which ignores its arguments)
+- zero-argument `new Date()`
+- `Math.random()`
+- `performance.now()`
+- `crypto.randomUUID()`
+- `crypto.getRandomValues()`
+
+The rule reports the call wherever it is written. Assigning its result to a local variable before passing that variable to a Command does not defer it. Neither does writing the call directly in the Command args. JavaScript obtains the value before constructing the Command in both cases.
+
+Obtain time or randomness inside the Command's `execute` callback instead. Use `Clock` or `Random` for time and ordinary randomness. For UUIDs and cryptographic randomness, use the `Crypto.Crypto` service with the platform's Crypto layer. Return the value in the result Message.
+
+The rule recognizes the deferred callback positions in Effect and Stream. It also recognizes these Foldkit lifecycle callbacks when they are declared inline:
+
+- `execute` in `Command.define`, `Mount.define`, and `Mount.defineStream`
+- `dependenciesToStream` in `Subscription.make`
+- `acquire` and `release` in `ManagedResource.make`
+
+Not every function passed to Effect is deferred. The rule still checks functions stored as Effect values, `Effect.fromOption`'s `onNone`, callbacks passed to `Effect.run*`, transform callbacks after the body of `Effect.fn` or `Effect.fnUntraced`, and callbacks passed to Effect APIs whose names end in `Eager`. It also checks the surrounding lifecycle builders and their synchronous Model projections. For example, `Subscription.make`'s builder and `modelToDependencies` are not execution callbacks.
+
+The recommended and all presets disable this rule in runtime entry files (`entry.ts`, `entry.tsx`, `entry.client.ts`, `entry.client.tsx`, `entry.server.ts`, and `entry.server.tsx`), where Flags and host integrations obtain outside values. The `.tsx` forms support JSX hosts, such as a React application that embeds Foldkit; Foldkit views still use the Html builder.
+
+The presets also disable the rule in TypeScript files under a `server` directory and in `prerender.ts` or `prerender.tsx`. Those files belong to the host rather than the Foldkit application state machine, so their request handlers and build scripts do not return values through Messages. Test files remain excluded with the rest of the Foldkit rules.
+
+This direct-call catalog does not prove that a file is pure. It recognizes static global member paths and ignores locally shadowed globals. It does not follow a method alias such as `const now = Date.now` to a later `now()` call, nor does it inspect a helper's call graph.
+
+::Snippet{name="lintNoImpureCallAtDecisionTime" label="foldkit/no-impure-call-at-decision-time example"}
 
 ### foldkit/no-module-level-mutable-state {#no-module-level-mutable-state}
 
@@ -174,9 +274,21 @@ Keeps a Got wrapper payload to the child Message plus routing keys: message, id,
 
 ### foldkit/no-child-message-construction-in-root {#no-child-message-construction-in-root}
 
-Rejects constructing a child Message variant from outside the child. Call a child-exported helper and route its output through the wrapper.
+Rejects constructing a child Message variant from a parent, including through a local `const` alias of the child constructor or namespace. Expose a child-owned update capability that applies the internal fact, then integrate it with `Update.foldChild` or `Update.foldChildStep`. A child-owned view, Command, or Subscription may still construct that child's Messages. The rule cannot infer the origin of an arbitrary prebuilt Message value. See [Informing Submodels](/patterns/informing-submodels) for the complete pattern.
 
 ::Snippet{name="lintNoChildMessageConstructionInRoot" label="foldkit/no-child-message-construction-in-root example"}
+
+### foldkit/no-direct-submodel-state-update {#no-direct-submodel-state-update}
+
+Flags a parent update that uses nested `modifyFields` to change a known Submodel field directly. The child update does not run, so validation, Commands, and OutMessages can be skipped. The rule establishes ownership from a module-scope `Update.foldChild` or `Update.foldChildStep` whose `read` and `write` point to the same field, then checks the parent Model passed through that fold. It leaves an unrelated Model with the same field name, fold `write` callbacks, and child-owned silent `reflect*` helpers alone.
+
+::Snippet{name="lintNoDirectSubmodelStateUpdate" label="foldkit/no-direct-submodel-state-update example"}
+
+### foldkit/require-fold-for-child-update-result {#require-fold-for-child-update-result}
+
+Flags a parent that copies only `.model` from a child helper or update result into its own Model instead of folding the complete result. This can silently discard Commands or an OutMessage. The rule requires an in-file `Update.foldChild` or `Update.foldChildStep` whose `update`, `read`, and `write` establish the child module and field, then follows a local result from that child's helper into the matching `modifyFields` field. The field need not be named after the module: `Products.update(model.productsPage)` is one example. It leaves unrelated helpers, initial Model assembly, fold `write` callbacks, and child-owned silent `reflect*` helpers alone. It does not infer direct helper imports or parent assembly outside `modifyFields`.
+
+::Snippet{name="lintRequireFoldForChildUpdateResult" label="foldkit/require-fold-for-child-update-result example"}
 
 ### foldkit/selection-submodel-factory-at-module-scope {#selection-submodel-factory-at-module-scope}
 

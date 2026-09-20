@@ -1,4 +1,4 @@
-import { Crypto, Effect, Schema as S } from 'effect'
+import { Crypto, Effect, Schema } from 'effect'
 import { Calendar, Runtime } from 'foldkit'
 
 import { BrowserCrypto } from '@effect/platform-browser'
@@ -15,15 +15,15 @@ import {
   WorkHistory,
 } from './step'
 import { update } from './update'
-import { view } from './view'
+import { view } from './view/view'
 
 // FLAGS
 
-export const Flags = S.Struct({
+export const Flags = Schema.Struct({
   today: Calendar.CalendarDate,
-  initialWorkHistoryEntryId: S.String,
-  initialEducationEntryId: S.String,
-  initialSkillsEntryId: S.String,
+  initialWorkHistoryEntryId: Schema.String,
+  initialEducationEntryId: Schema.String,
+  initialSkillsEntryId: Schema.String,
 })
 export type Flags = typeof Flags.Type
 

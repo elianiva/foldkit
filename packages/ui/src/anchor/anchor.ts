@@ -1,4 +1,4 @@
-import { Array, Function, Option, Schema as S, String, pipe } from 'effect'
+import { Array, Function, Option, Schema, String, pipe } from 'effect'
 
 import {
   type Placement as FloatingPlacement,
@@ -13,7 +13,7 @@ import {
 
 /** Schema mirroring `@floating-ui/dom`'s `Placement` literal union: a side
  *  (`top`/`right`/`bottom`/`left`) optionally suffixed with `-start` or `-end`. */
-export const Placement = S.Literals([
+export const Placement = Schema.Literals([
   'top',
   'right',
   'bottom',
@@ -32,26 +32,26 @@ export type Placement = typeof Placement.Type
 
 /** Schema mirroring `@floating-ui/dom`'s `Padding` type: a uniform number or a
  *  partial per-side object (`top`/`right`/`bottom`/`left`). */
-export const Padding = S.Union([
-  S.Number,
-  S.Struct({
-    top: S.optionalKey(S.Number),
-    right: S.optionalKey(S.Number),
-    bottom: S.optionalKey(S.Number),
-    left: S.optionalKey(S.Number),
+export const Padding = Schema.Union([
+  Schema.Number,
+  Schema.Struct({
+    top: Schema.optionalKey(Schema.Number),
+    right: Schema.optionalKey(Schema.Number),
+    bottom: Schema.optionalKey(Schema.Number),
+    left: Schema.optionalKey(Schema.Number),
   }),
 ])
 
 export type Padding = typeof Padding.Type
 
 /** Static configuration for anchor-based positioning of a floating element relative to a button. */
-export const AnchorConfig = S.Struct({
-  placement: S.optional(Placement),
-  gap: S.optional(S.Number),
-  offset: S.optional(S.Number),
-  padding: S.optional(Padding),
-  portal: S.optional(S.Boolean),
-  isPlacementLocked: S.optional(S.Boolean),
+export const AnchorConfig = Schema.Struct({
+  placement: Schema.optional(Placement),
+  gap: Schema.optional(Schema.Number),
+  offset: Schema.optional(Schema.Number),
+  padding: Schema.optional(Padding),
+  portal: Schema.optional(Schema.Boolean),
+  isPlacementLocked: Schema.optional(Schema.Boolean),
 })
 
 export type AnchorConfig = typeof AnchorConfig.Type
@@ -107,6 +107,11 @@ export const portalToContainingRoot = (element: Element): (() => void) => {
     }
   }
 }
+
+const isInsideFixedContainer = (element: Element | null): boolean =>
+  element !== null &&
+  (getComputedStyle(element).position === 'fixed' ||
+    isInsideFixedContainer(element.parentElement))
 
 const toSide = (placement: FloatingPlacement): string =>
   pipe(placement, String.split('-'), Array.headNonEmpty)
@@ -171,9 +176,17 @@ const setOrResetLength = (
  *  components like Popover where Tab should navigate naturally within the
  *  panel. When `focusAfterPosition` is true, the element is focused after the
  *  first position computation clears visibility, deferred via
- *  requestAnimationFrame so the element is painted before focus fires.
+ *  requestAnimationFrame so the element is painted before focus fires. That
+ *  focus passes `preventScroll`. Floating UI has already placed the element
+ *  in view, so a scroll-on-focus can only move the page under it, which
+ *  happens when the element's top edge lands within the document's
+ *  `scroll-padding-top`.
  *  `focusSelector` optionally targets a descendant (e.g. a calendar grid
  *  inside a popover panel) instead of the panel itself.
+ *  A portaled element whose button sits inside a `position: fixed` ancestor
+ *  is positioned with Floating UI's fixed strategy, so it stays under the
+ *  button while the page scrolls instead of moving with the document until
+ *  `autoUpdate` repositions it.
  *  The side the element currently sits on is written to `data-placement`, so
  *  CSS can react to it. When `isPlacementLocked` is true, the element keeps the
  *  side that the first positioning picks, `flip` is removed from every later
@@ -191,9 +204,27 @@ export const anchorSetup = (
   const root = element.getRootNode()
   const inShadow = root instanceof ShadowRoot
   const owner = inShadow ? root : document
+
+  if (!(element instanceof HTMLElement)) {
+    console.error(
+      '[@foldkit/ui] anchorSetup requires an HTML panel. The panel will not be positioned.',
+    )
+    return Function.constVoid
+  }
+
   const button = owner.getElementById(config.buttonId)
 
-  if (!(button instanceof HTMLElement) || !(element instanceof HTMLElement)) {
+  if (button === null) {
+    console.error(
+      `[@foldkit/ui] anchorSetup could not find a trigger with id "${config.buttonId}". The panel will not be positioned.`,
+    )
+    return Function.constVoid
+  }
+
+  if (!(button instanceof HTMLElement)) {
+    console.error(
+      `[@foldkit/ui] anchorSetup requires an HTML trigger with id "${config.buttonId}". The panel will not be positioned.`,
+    )
     return Function.constVoid
   }
 
@@ -203,9 +234,16 @@ export const anchorSetup = (
   // NOTE: inside a shadow root the panel's offsetParent resolves to the
   // light-DOM host element, so Floating UI's absolute strategy mis-measures
   // its position. The fixed strategy is viewport-relative and sidesteps the
-  // offsetParent entirely. Light-DOM apps keep the absolute strategy.
-  const strategy = inShadow ? 'fixed' : 'absolute'
-  if (inShadow) {
+  // offsetParent entirely. A portaled panel whose button sits inside a
+  // `position: fixed` ancestor needs the fixed strategy too: absolute
+  // coordinates move with the document on every scroll while the button
+  // stays put, so the panel visibly lags until `autoUpdate` catches up. A
+  // `sticky` ancestor is left alone, since it is viewport-anchored only past
+  // its threshold and neither strategy is right across the whole scroll
+  // range. Other light-DOM apps keep the absolute strategy.
+  const isAnchoredToFixedContainer = isPortal && isInsideFixedContainer(button)
+  const strategy = inShadow || isAnchoredToFixedContainer ? 'fixed' : 'absolute'
+  if (strategy === 'fixed') {
     element.style.position = 'fixed'
   }
 
@@ -354,7 +392,7 @@ export const anchorSetup = (
                   ? owner.querySelector(config.focusSelector)
                   : element
                 if (target instanceof HTMLElement) {
-                  target.focus()
+                  target.focus({ preventScroll: true })
                 }
               })
             }

@@ -16,15 +16,29 @@ If `./repos/foldkit` exists, it contains the full Foldkit repository, vendored i
 
 Treat the subtree as read-only reference: never import from `repos/foldkit/` in your project source. Imports must come from the `foldkit` npm package.
 
-If `./repos/foldkit` does not exist and `AGENTS.md` says `subtree_prompted: false`, offer to run `git subtree add --prefix=repos/foldkit https://github.com/foldkit/foldkit.git main --squash`. This gives you access to the full source, examples, and docs. Whether the user accepts or declines, set that line in `AGENTS.md` to `true` so it isn't asked again.
+If `./repos/foldkit` does not exist and `AGENTS.md` says `subtree_prompted: false`, offer to vendor the repository. It gives you access to the full source, examples, and docs. Pin it to the release git tag matching the installed `foldkit` package; vendoring `main` instead can hand you examples and APIs from a release the project has not installed:
+
+```sh
+git subtree add --prefix=repos/foldkit https://github.com/foldkit/foldkit.git "foldkit@$(node -p "require('./node_modules/foldkit/package.json').version")" --squash
+```
+
+A canary install has no release tag to pin to. Its version names its source commit (`0.156.0-canary.<commit>`); use the full hash of that commit as the ref instead. GitHub expands the short hash at `https://github.com/foldkit/foldkit/commit/<commit>`.
+
+Whether the user accepts or declines, set that line in `AGENTS.md` to `true` so it isn't asked again.
 
 If `foldkit-skills` is installed as a Claude Code plugin, the `generate-program` and `audit-program` skills carry snapshot architecture and conventions guides synced from the live code.
 
-## Keeping this file current
+## After a Foldkit upgrade
 
-Foldkit's APIs and conventions change, and this file changes with them. A stale copy sends agents after APIs the installed packages no longer export.
+Two things go stale when the project upgrades its Foldkit packages: the vendored subtree and this file. Bring both forward, subtree first, since the fresh copy of this file comes from it.
 
-Replace it whenever the project upgrades its Foldkit packages. If `./repos/foldkit` exists, copy `repos/foldkit/packages/create-foldkit-app/templates/base/FOLDKIT.md` over this file. Otherwise take the [current template on GitHub](https://github.com/foldkit/foldkit/blob/main/packages/create-foldkit-app/templates/base/FOLDKIT.md). There is nothing here to merge or preserve.
+Re-pin the subtree to the newly installed release (for a canary install, pin to the commit its version names, as above):
+
+```sh
+git subtree pull --prefix=repos/foldkit https://github.com/foldkit/foldkit.git "foldkit@$(node -p "require('./node_modules/foldkit/package.json').version")" --squash
+```
+
+Then replace this file whole. Foldkit's conventions change with its APIs, and a stale copy sends agents after APIs the installed packages no longer export. Copy `repos/foldkit/packages/create-foldkit-app/templates/base/FOLDKIT.md` over this file. Without the subtree, take the template from GitHub at the tag matching the installed version: `https://github.com/foldkit/foldkit/blob/foldkit@<version>/packages/create-foldkit-app/templates/base/FOLDKIT.md`. There is nothing here to merge or preserve.
 
 ## Project Conventions
 
@@ -47,7 +61,7 @@ Replace it whenever the project upgrades its Foldkit packages. If `./repos/foldk
 const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedIncrement: () => ({
-      model: evo(model, { count: count => count + 1 }),
+      model: modifyFields(model, { count: count => count + 1 }),
     }),
   })
 ```
@@ -62,7 +76,7 @@ Pass optional Commands directly to APIs that accept them: `Command.mapMessages(h
 
 Use `Update.Return<Model, Message>` when an update cannot emit an OutMessage. It prevents a result containing an OutMessage from entering code that would keep only its Model and Commands. A result with no `outMessage` can still be used where `Update.ReturnWithOutMessage<Model, Message, OutMessage>` is expected. The missing field means that update emitted no OutMessage.
 
-Manual unpacking of a child result usually means the site should use `Update.foldChild` or `Update.foldChildStep`.
+Use `Update.foldChildInit` for one child `init` or `boot` result. Use `Update.foldChildInits` when several child results enter one parent Model. Both lift child Commands and handle child OutMessages. Use `Update.foldChild` for a child update that receives input, or `Update.foldChildStep` for a child helper that receives only its Model. Keep route-gated initialization or Model-only child construction separate when there is no shared set of child results to fold.
 
 Use `Update.combine` when a later Step should receive the Model produced by an earlier Step. It takes two or more Steps. Do not wrap one Step in `Update.combine`; call that operation directly. Name an inline Step parameter `stepModel`; it contains the Model produced by the preceding Step.
 
@@ -70,7 +84,9 @@ When the OutMessage is already known while constructing a new result, include it
 
 Add `toParentOutMessage` only when at least one child OutMessage should continue to the current Submodel's parent. For partial forwarding, match every child variant and return `undefined` for the variants that stop here. Omit `toParentOutMessage` when every variant stops here. `foldOutMessage` still handles each variant locally, including variants that continue upward. Never write `toParentOutMessage: () => undefined`.
 
-Use `evo()` from `foldkit/struct` for immutable model updates. Never spread or `Object.assign`.
+When a `foldChildInits` entry can derive or forward an OutMessage, add `resolveOutMessage` to construct one parent OutMessage from the named OutMessages after every local fold completes. Combine their information when both results matter; choosing one discards the other. The callback also receives the final Model. If that Model alone contains everything needed, use local folds and attach a parent OutMessage afterward with `Update.withOutMessage`.
+
+Use `modifyFields()` from `foldkit/struct` for immutable model updates. Never spread or `Object.assign`.
 
 ### View
 
@@ -84,9 +100,11 @@ Omit the children argument when an element has none: `h.div([h.Class('divider')]
 
 Define a Command with `Command.define(name, { args, messages, execute })`; omit `args` when the Command takes none. Assign definitions to PascalCase constants. Never inline in pipe chains. Name the effect `execute` performs, not the later Model transition caused when update handles its result: a timer that only waits before update starts a dismissal is `WaitBeforeDismissal`, not `DismissAfter`. Commands catch all errors via `Effect.catch(() => Effect.succeed(Message.FailedX(...)))` so side effects never crash the app. Definitions live colocated with the update function that returns them.
 
+Command args contain values already present in the Model or Message. Calling `Date.now()`, `crypto.randomUUID()`, or another source of time or randomness while preparing a Command happens before the Command executes, whether the call appears directly in the args object or its result is assigned to a local variable first. Obtain those values in `execute` and return them in the result Message.
+
 For the with-args shape, see `repos/foldkit/examples/weather/src/main.ts` or `repos/foldkit/examples/kanban/src/command.ts`. For an argless DOM-side-effect Command, the argless form in `kanban/src/command.ts` (`FocusAddCardInput`) is the canonical reference.
 
-For DOM operations (focus, scroll, modals, scroll lock), Foldkit ships a `Dom` module. For time, randomness, UUIDs, and delays, use Effect's built-ins directly (`Clock`, `Random`, `Effect.uuid`, `Effect.sleep`). Don't reach for raw `document.querySelector`, `setTimeout`, `Date.now()`, or `Math.random()`.
+For DOM operations (focus, scroll, modals, scroll lock), Foldkit ships a `Dom` module. For time, randomness, UUIDs, and delays, use Effect's APIs directly (`Clock`, `Random`, `Crypto.Crypto`, `Effect.sleep`). Provide the platform Crypto layer when using `Crypto.Crypto`. Don't reach for raw `document.querySelector`, `setTimeout`, `Date.now()`, or `Math.random()`.
 
 ### File Organization
 
@@ -126,14 +144,14 @@ Declare the whole Message union with `defineMessageUnion()`, then put `type Mess
 ```ts
 const Message = defineMessageUnion({
   ClickedSubmit: {},
-  UpdatedEmail: { value: S.String },
+  UpdatedEmail: { value: Schema.String },
 })
 type Message = typeof Message.Type
 ```
 
 Keep the `defineMessageUnion()` declaration and `type Message` alias adjacent. Construct values through the namespace (`Message.ClickedSubmit()`) and handle the union with `Message.match`. Never destructure constructors from `Message` or `OutMessage`; the owning namespace stays visible at every call site.
 
-Keep each case's payload object on one line when it fits. Let Prettier wrap payloads that need more space, so the declaration remains easy to scan as one variant per line.
+Keep each case's payload object on one line when it fits. Let Oxfmt wrap payloads that need more space, so the declaration remains easy to scan as one variant per line.
 
 Messages are verb-first past-tense. Common prefixes: `Clicked*`, `Updated*` (input changes and external state updates), `Submitted*`, `Pressed*`, `Selected*`, `Succeeded*` / `Failed*` (paired async results), `Completed*` (every other Command result), `Got*` (child OutMessage in the Submodel pattern).
 

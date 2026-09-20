@@ -2,7 +2,7 @@ import {
   Clock,
   Duration,
   Effect,
-  Schema as S,
+  Schema,
   Stream,
   String,
   flow,
@@ -11,7 +11,7 @@ import {
 import { Command, Runtime, Subscription, type Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Button } from '@foldkit/ui'
 
@@ -19,10 +19,10 @@ const TICK_INTERVAL_MS = 10
 
 // MODEL
 
-export const Model = S.Struct({
-  elapsedMs: S.Number,
-  isRunning: S.Boolean,
-  startTime: S.Number,
+export const Model = Schema.Struct({
+  elapsedMs: Schema.Number,
+  isRunning: Schema.Boolean,
+  startTime: Schema.Number,
 })
 export type Model = typeof Model.Type
 
@@ -30,11 +30,11 @@ export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
   ClickedStart: {},
-  CompletedDetermineStartTime: { startTime: S.Number },
+  CompletedDetermineStartTime: { startTime: Schema.Number },
   ClickedStop: {},
   ClickedReset: {},
   Ticked: {},
-  CompletedDetermineTickTime: { elapsedMs: S.Number },
+  CompletedDetermineTickTime: { elapsedMs: Schema.Number },
 })
 
 export type Message = typeof Message.Type
@@ -42,7 +42,7 @@ export type Message = typeof Message.Type
 // COMMAND
 
 export const DetermineStartTime = Command.define('DetermineStartTime', {
-  args: { elapsedMs: S.Number },
+  args: { elapsedMs: Schema.Number },
   messages: [Message.CompletedDetermineStartTime],
   execute: ({ elapsedMs }) =>
     Effect.gen(function* () {
@@ -52,7 +52,7 @@ export const DetermineStartTime = Command.define('DetermineStartTime', {
 })
 
 export const DetermineTickTime = Command.define('DetermineTickTime', {
-  args: { startTime: S.Number },
+  args: { startTime: Schema.Number },
   messages: [Message.CompletedDetermineTickTime],
   execute: ({ startTime }) =>
     Effect.gen(function* () {
@@ -71,20 +71,20 @@ export const update = (model: Model, message: Message) =>
     }),
 
     CompletedDetermineStartTime: ({ startTime }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         isRunning: () => true,
         startTime: () => startTime,
       }),
     }),
 
     ClickedStop: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         isRunning: () => false,
       }),
     }),
 
     ClickedReset: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         elapsedMs: () => 0,
         isRunning: () => false,
         startTime: () => 0,
@@ -97,7 +97,7 @@ export const update = (model: Model, message: Message) =>
     }),
 
     CompletedDetermineTickTime: ({ elapsedMs }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         elapsedMs: () => elapsedMs,
       }),
     }),
@@ -117,7 +117,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
 
 export const subscriptions = Subscription.make<Model, Message>()(entry => ({
   tick: entry(
-    { isRunning: S.Boolean },
+    { isRunning: Schema.Boolean },
     {
       modelToDependencies: model => ({ isRunning: model.isRunning }),
       dependenciesToStream: ({ isRunning }) =>

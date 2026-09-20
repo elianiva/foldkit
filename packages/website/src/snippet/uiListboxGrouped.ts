@@ -1,11 +1,11 @@
 // Pseudocode walkthrough of the Foldkit integration points. Each labeled
 // block below is an excerpt. Fit them into your own Model, init, Message,
 // update, and view definitions.
-import { Match as M, Option, Schema as S } from 'effect'
+import { Option, Schema } from 'effect'
 import { Update } from 'foldkit'
 import { type HtmlBuilder, childAttributes } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Listbox } from '@foldkit/ui'
 
@@ -24,8 +24,8 @@ const CharacterListbox = Listbox.create<Character>()
 
 // Add a field to your Model for the Listbox Submodel, plus a field for
 // the selected value your app actually cares about:
-const Model = S.Struct({
-  maybeCharacter: S.Option(S.String),
+const Model = Schema.Struct({
+  maybeCharacter: Schema.Option(Schema.String),
   listbox: Listbox.Model,
   // ...your other fields
 })
@@ -48,16 +48,15 @@ const Message = defineMessageUnion({
 // `Selected` variant carries the chosen item's string value (the result of
 // `itemToValue`). The arm returns an Update.Step over the parent Model, which
 // already has the next Listbox Model written back:
-const foldListboxOutMessage = M.type<Listbox.OutMessage>().pipe(
-  M.withReturnType<Update.Step<Model, Message>>(),
-  M.tagsExhaustive({
-    Selected:
-      ({ value }) =>
-      model => ({
-        model: evo(model, { maybeCharacter: () => Option.some(value) }),
-      }),
-  }),
-)
+const foldListboxOutMessage = Listbox.OutMessage.match<
+  Update.Step<Model, Message>
+>({
+  Selected:
+    ({ value }) =>
+    model => ({
+      model: modifyFields(model, { maybeCharacter: () => Option.some(value) }),
+    }),
+})
 
 // Update.foldChild wires the child into the parent: it delegates keyboard
 // navigation, typeahead, and open/close to CharacterListbox.update, writes the
@@ -66,7 +65,8 @@ const foldListboxOutMessage = M.type<Listbox.OutMessage>().pipe(
 const foldListbox = Update.foldChild({
   update: CharacterListbox.update,
   read: (model: Model) => Option.some(model.listbox),
-  write: (model, nextListbox) => evo(model, { listbox: () => nextListbox }),
+  write: (model, nextListbox) =>
+    modifyFields(model, { listbox: () => nextListbox }),
   toParentMessage: message => Message.GotListboxMessage({ message }),
   foldOutMessage: foldListboxOutMessage,
 })

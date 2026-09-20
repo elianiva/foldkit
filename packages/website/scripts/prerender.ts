@@ -3,11 +3,11 @@ import {
   Console,
   DateTime,
   Effect,
-  Match as M,
+  Match,
   Option,
   Record,
-  Schema as S,
-  String as String_,
+  Schema,
+  String,
   pipe,
 } from 'effect'
 import { FileSystem } from 'effect'
@@ -32,104 +32,10 @@ import { BLOG_DESCRIPTION, BLOG_RSS_PATH } from '../src/page/blog/meta'
 import { exampleSlugs, examples } from '../src/page/example/meta'
 import {
   AppRoute,
-  aboutRouter,
-  aiMcpRouter,
-  aiOverviewRouter,
-  aiSkillsRouter,
-  apiModuleRouter,
-  asyncDataRouter,
-  bestPracticesImmutabilityRouter,
-  bestPracticesKeyingRouter,
-  bestPracticesMessagesRouter,
-  bestPracticesSideEffectsRouter,
+  SITE_URL,
   blogPostRouter,
   blogRouter,
-  comingFromReactRouter,
-  comingFromTanStackQueryRouter,
-  contactRouter,
-  contentApiRouter,
-  coreArchitectureRouter,
-  coreCanvasRouter,
-  coreCommandsRouter,
-  coreCounterExampleRouter,
-  coreCrashViewRouter,
-  coreCustomElementRouter,
-  coreDevToolsRouter,
-  coreDomRouter,
-  coreEmbeddingRouter,
-  coreFileRouter,
-  coreFreezeModelRouter,
-  coreHttpRouter,
-  coreInitAndFlagsRouter,
-  coreManagedResourcesRouter,
-  coreMessagesRouter,
-  coreModelRouter,
-  coreMountRouter,
-  corePreserveScrollRouter,
-  coreRenderRouter,
-  coreResourcesRouter,
-  coreRuntimeRouter,
-  coreServerRenderingRouter,
-  coreSlowWarningsRouter,
-  coreSubmodelRouter,
-  coreSubscriptionsRouter,
-  coreUpdateRouter,
-  coreViewMemoizationRouter,
-  coreViewRouter,
-  coreViewTransitionsRouter,
-  effectAtomComparisonRouter,
-  elmComparisonRouter,
-  exampleDetailRouter,
-  examplesRouter,
-  fieldValidationRouter,
-  gettingStartedRouter,
-  homeRouter,
-  manifestoRouter,
-  newsletterRouter,
-  patternsInformingSubmodelsRouter,
-  patternsSubscriptionOrganizationRouter,
-  performanceRouter,
-  playgroundRouter,
-  privacyRouter,
-  projectOrganizationRouter,
-  reactComparisonRouter,
-  roadmapRouter,
-  routingAndNavigationRouter,
-  testingRouter,
-  testingSceneRouter,
-  testingStoryRouter,
-  toolingLintingRouter,
-  typingTerminalRouter,
-  uiAnchorRouter,
-  uiAnimationRouter,
-  uiButtonRouter,
-  uiCalendarRouter,
-  uiCheckboxRouter,
-  uiComboboxRouter,
-  uiDatePickerRouter,
-  uiDialogRouter,
-  uiDisclosureRouter,
-  uiDragAndDropRouter,
-  uiFieldsetRouter,
-  uiFileDropRouter,
-  uiHoverIntentRouter,
-  uiInputRouter,
-  uiListboxRouter,
-  uiMenuRouter,
-  uiNavRouter,
-  uiOverviewRouter,
-  uiPopoverRouter,
-  uiRadioGroupRouter,
-  uiSelectRouter,
-  uiSelectionSubmodelsRouter,
-  uiSliderRouter,
-  uiSwitchRouter,
-  uiTabsRouter,
-  uiTextareaRouter,
-  uiToastRouter,
-  uiTooltipRouter,
-  uiVirtualListRouter,
-  whyNoJsxRouter,
+  routeToUrlPath,
 } from '../src/route'
 import { type BlogPostEntry, blogPostSlugs, blogPosts } from './blogPosts'
 import {
@@ -154,10 +60,9 @@ import { generateOgImages, injectMetaTags } from './og-image'
 export const STATIC_ROUTES: ReadonlyArray<AppRoute> = [
   AppRoute.Home(),
   AppRoute.Newsletter(),
-  AppRoute.Manifesto(),
-  AppRoute.WhyNoJsx(),
+  AppRoute.WhyFoldkit(),
   AppRoute.Performance(),
-  AppRoute.GettingStarted(),
+  AppRoute.GetStarted(),
   AppRoute.Roadmap(),
   AppRoute.ComingFromReact(),
   AppRoute.ComingFromTanStackQuery(),
@@ -207,7 +112,9 @@ export const STATIC_ROUTES: ReadonlyArray<AppRoute> = [
   AppRoute.CoreFreezeModel(),
   AppRoute.CorePreserveScroll(),
   AppRoute.CoreSubmodel(),
+  AppRoute.CoreMachine(),
   AppRoute.AsyncData(),
+  AppRoute.PatternsAntiPatterns(),
   AppRoute.PatternsInformingSubmodels(),
   AppRoute.PatternsSubscriptionOrganization(),
   AppRoute.CoreViewMemoization(),
@@ -257,110 +164,6 @@ const PLAYGROUND_ROUTES: ReadonlyArray<AppRoute> = Array.map(
   exampleSlug => AppRoute.Playground({ exampleSlug }),
 )
 
-export const routeToUrlPath = (route: AppRoute): string =>
-  AppRoute.match<string>(route, {
-    Home: () => homeRouter(),
-    Manifesto: () => manifestoRouter(),
-    WhyNoJsx: () => whyNoJsxRouter(),
-    Performance: () => performanceRouter(),
-    GettingStarted: () => gettingStartedRouter(),
-    Roadmap: () => roadmapRouter(),
-    ComingFromReact: () => comingFromReactRouter(),
-    ComingFromTanStackQuery: () => comingFromTanStackQueryRouter(),
-    ReactComparison: () => reactComparisonRouter(),
-    EffectAtomComparison: () => effectAtomComparisonRouter(),
-    ElmComparison: () => elmComparisonRouter(),
-    RoutingAndNavigation: () => routingAndNavigationRouter(),
-    FieldValidation: () => fieldValidationRouter(),
-    Testing: () => testingRouter(),
-    TestingStory: () => testingStoryRouter(),
-    TestingScene: () => testingSceneRouter(),
-    Examples: () => examplesRouter(),
-    ExampleDetail: ({ exampleSlug }) => exampleDetailRouter({ exampleSlug }),
-    TypingTerminal: () => typingTerminalRouter(),
-    BestPracticesSideEffects: () => bestPracticesSideEffectsRouter(),
-    BestPracticesMessages: () => bestPracticesMessagesRouter(),
-    BestPracticesKeying: () => bestPracticesKeyingRouter(),
-    BestPracticesImmutability: () => bestPracticesImmutabilityRouter(),
-    ProjectOrganization: () => projectOrganizationRouter(),
-    ToolingLinting: () => toolingLintingRouter(),
-    CoreArchitecture: () => coreArchitectureRouter(),
-    CoreCounterExample: () => coreCounterExampleRouter(),
-    CoreModel: () => coreModelRouter(),
-    CoreMessages: () => coreMessagesRouter(),
-    CoreUpdate: () => coreUpdateRouter(),
-    CoreView: () => coreViewRouter(),
-    CoreCommands: () => coreCommandsRouter(),
-    CoreMount: () => coreMountRouter(),
-    CoreCustomElement: () => coreCustomElementRouter(),
-    CoreSubscriptions: () => coreSubscriptionsRouter(),
-    CoreInitAndFlags: () => coreInitAndFlagsRouter(),
-    CoreDom: () => coreDomRouter(),
-    CoreRender: () => coreRenderRouter(),
-    CoreFile: () => coreFileRouter(),
-    CoreHttp: () => coreHttpRouter(),
-    CoreCanvas: () => coreCanvasRouter(),
-    CoreRuntime: () => coreRuntimeRouter(),
-    CoreServerRendering: () => coreServerRenderingRouter(),
-    CoreResources: () => coreResourcesRouter(),
-    CoreManagedResources: () => coreManagedResourcesRouter(),
-    CoreDevTools: () => coreDevToolsRouter(),
-    CoreCrashView: () => coreCrashViewRouter(),
-    CoreViewTransitions: () => coreViewTransitionsRouter(),
-    CoreSlowWarnings: () => coreSlowWarningsRouter(),
-    CoreFreezeModel: () => coreFreezeModelRouter(),
-    CorePreserveScroll: () => corePreserveScrollRouter(),
-    CoreSubmodel: () => coreSubmodelRouter(),
-    AsyncData: () => asyncDataRouter(),
-    PatternsInformingSubmodels: () => patternsInformingSubmodelsRouter(),
-    PatternsSubscriptionOrganization: () =>
-      patternsSubscriptionOrganizationRouter(),
-    CoreViewMemoization: () => coreViewMemoizationRouter(),
-    CoreEmbedding: () => coreEmbeddingRouter(),
-    UiOverview: () => uiOverviewRouter(),
-    UiSelectionSubmodels: () => uiSelectionSubmodelsRouter(),
-    UiTabs: () => uiTabsRouter(),
-    UiNav: () => uiNavRouter(),
-    UiDisclosure: () => uiDisclosureRouter(),
-    UiDialog: () => uiDialogRouter(),
-    UiMenu: () => uiMenuRouter(),
-    UiPopover: () => uiPopoverRouter(),
-    UiListbox: () => uiListboxRouter(),
-    UiRadioGroup: () => uiRadioGroupRouter(),
-    UiSelect: () => uiSelectRouter(),
-    UiSlider: () => uiSliderRouter(),
-    UiSwitch: () => uiSwitchRouter(),
-    UiButton: () => uiButtonRouter(),
-    UiCalendar: () => uiCalendarRouter(),
-    UiDatePicker: () => uiDatePickerRouter(),
-    UiCheckbox: () => uiCheckboxRouter(),
-    UiCombobox: () => uiComboboxRouter(),
-    UiInput: () => uiInputRouter(),
-    UiTextarea: () => uiTextareaRouter(),
-    UiFieldset: () => uiFieldsetRouter(),
-    UiDragAndDrop: () => uiDragAndDropRouter(),
-    UiFileDrop: () => uiFileDropRouter(),
-    UiHoverIntent: () => uiHoverIntentRouter(),
-    UiToast: () => uiToastRouter(),
-    UiTooltip: () => uiTooltipRouter(),
-    UiAnimation: () => uiAnimationRouter(),
-    UiAnchor: () => uiAnchorRouter(),
-    UiVirtualList: () => uiVirtualListRouter(),
-    AiOverview: () => aiOverviewRouter(),
-    AiSkills: () => aiSkillsRouter(),
-    AiMcp: () => aiMcpRouter(),
-    ApiModule: ({ moduleSlug }) => apiModuleRouter({ moduleSlug }),
-    ContentApi: () => contentApiRouter(),
-    About: () => aboutRouter(),
-    Contact: () => contactRouter(),
-    Privacy: () => privacyRouter(),
-    Playground: ({ exampleSlug }) => playgroundRouter({ exampleSlug }),
-    Newsletter: () => newsletterRouter(),
-    Blog: () => blogRouter(),
-    BlogPost: ({ postSlug }) => blogPostRouter({ postSlug }),
-    NotFound: ({ path }) => path,
-  })
-
 export const INDEX_OUTPUT_PATH = 'index.html'
 
 export const routeToOutputPath = (route: AppRoute): string => {
@@ -402,9 +205,10 @@ const CONTAINER_PLACEHOLDER = `<div id="${CONTAINER_ID}"></div>`
 const SERVER_ENTRY_PATH = resolve(WEBSITE_DIR, 'dist-server/entry.server.js')
 
 // NOTE: the app module graph uses Vite-only specifiers (`virtual:*`, `.md`,
-// `?raw`, `import.meta.glob`), so it cannot be imported by tsx directly. The
-// `preprerender` script builds `src/entry.server.ts` with `vite build --ssr`
-// first, and this dynamic import loads that bundle.
+// `?raw`, `import.meta.glob`) that only the application's plugins resolve, and
+// the scripts build loads none of them. The `preprerender` script builds
+// `src/entry.server.ts` with the application config first, and this dynamic
+// import loads that bundle.
 const loadServerEntry: Effect.Effect<typeof ServerEntry> = Effect.promise(
   () => import(pathToFileURL(SERVER_ENTRY_PATH).href),
 )
@@ -482,7 +286,7 @@ const renderRoutePage = (serverEntry: typeof ServerEntry, route: AppRoute) =>
 
 // PRERENDER
 
-const ApiDocJson = S.fromJsonString(TypeDocJson)
+const ApiDocJson = Schema.fromJsonString(TypeDocJson)
 
 // NOTE: The core and UI TypeDoc projects are merged here the same way
 // vite.config.ts merges them for the client. Reading only api.json drops every
@@ -494,8 +298,8 @@ const readApiModules = Effect.gen(function* () {
     fs.readFileString(API_JSON_PATH),
     fs.readFileString(API_UI_JSON_PATH),
   ])
-  const coreApiDoc = yield* S.decodeUnknownEffect(ApiDocJson)(coreRaw)
-  const uiApiDoc = yield* S.decodeUnknownEffect(ApiDocJson)(uiRaw)
+  const coreApiDoc = yield* Schema.decodeUnknownEffect(ApiDocJson)(coreRaw)
+  const uiApiDoc = yield* Schema.decodeUnknownEffect(ApiDocJson)(uiRaw)
 
   return parseTypedocJson({
     ...coreApiDoc,
@@ -577,7 +381,9 @@ const prerenderRoute =
     }).pipe(
       Effect.catch(error =>
         Effect.as(
-          Console.warn(`  ✗ ${routeToUrlPath(route)}: ${String(error)}`),
+          Console.warn(
+            `  ✗ ${routeToUrlPath(route)}: ${globalThis.String(error)}`,
+          ),
           Option.none<PrerenderResult>(),
         ),
       ),
@@ -679,13 +485,11 @@ const prerenderNotFoundPage = (
 
 // SITEMAP
 
-const SITE_URL = 'https://foldkit.dev'
-
 const formatDateIso = (dateTime: DateTime.DateTime): string => {
   const { year, month, day } = DateTime.toPartsUtc(dateTime)
   return pipe(
-    [String(year), String(month), String(day)],
-    Array.map(String_.padStart(2, '0')),
+    [globalThis.String(year), globalThis.String(month), globalThis.String(day)],
+    Array.map(String.padStart(2, '0')),
     Array.join('-'),
   )
 }
@@ -741,9 +545,9 @@ export const extractPostArticleHtml = (
   pageHtml: string,
 ): Option.Option<string> =>
   pipe(
-    String_.indexOf('<article')(pageHtml),
+    String.indexOf('<article')(pageHtml),
     Option.flatMap(startIndex =>
-      Option.map(String_.indexOf('</article>')(pageHtml), endIndex =>
+      Option.map(String.indexOf('</article>')(pageHtml), endIndex =>
         pageHtml.slice(startIndex, endIndex + '</article>'.length),
       ),
     ),
@@ -765,14 +569,14 @@ const escapeCdataContent = (html: string): string =>
 const maybeFeedArticleEntry = (
   result: PrerenderResult,
 ): Option.Option<readonly [string, string]> =>
-  M.value(result.route).pipe(
-    M.tag('BlogPost', ({ postSlug }) =>
+  Match.value(result.route).pipe(
+    Match.tag('BlogPost', ({ postSlug }) =>
       Option.map(
         extractPostArticleHtml(result.html),
         articleHtml => [postSlug, toFeedArticleHtml(articleHtml)] as const,
       ),
     ),
-    M.orElse(() => Option.none()),
+    Match.orElse(() => Option.none()),
   )
 
 const blogPostRssItem = (

@@ -1,21 +1,21 @@
-import { Effect, Schema as S } from 'effect'
+import { Effect, Schema } from 'effect'
 import { Command, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
-const UserSchema = S.Struct({ id: S.String, name: S.String })
+const UserSchema = Schema.Struct({ id: Schema.String, name: Schema.String })
 
 const UserState = defineTaggedUnion({
   Loading: {},
   Success: { data: UserSchema },
-  Failure: { error: S.String },
+  Failure: { error: Schema.String },
 })
 
 // MODEL
 
-const Model = S.Struct({
-  userId: S.String,
+const Model = Schema.Struct({
+  userId: Schema.String,
   user: UserState,
 })
 type Model = typeof Model.Type
@@ -23,23 +23,23 @@ type Model = typeof Model.Type
 // MESSAGE
 
 const Message = defineMessageUnion({
-  ClickedFetchUser: { userId: S.String },
+  ClickedFetchUser: { userId: Schema.String },
   SucceededFetchUser: { data: UserSchema },
-  FailedFetchUser: { error: S.String },
+  FailedFetchUser: { error: Schema.String },
 })
 type Message = typeof Message.Type
 
 // COMMAND
 
 const FetchUser = Command.define('FetchUser', {
-  args: { userId: S.String },
+  args: { userId: Schema.String },
   messages: [Message.SucceededFetchUser, Message.FailedFetchUser],
   execute: ({ userId }) =>
     Effect.gen(function* () {
       const response = yield* Effect.tryPromise(() =>
         fetch(`/api/users/${userId}`).then(response => response.json()),
       )
-      const data = yield* S.decodeUnknownEffect(UserSchema)(response)
+      const data = yield* Schema.decodeUnknownEffect(UserSchema)(response)
       return Message.SucceededFetchUser({ data })
     }).pipe(
       Effect.catch(error =>
@@ -53,13 +53,13 @@ const FetchUser = Command.define('FetchUser', {
 const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedFetchUser: ({ userId }) => ({
-      model: evo(model, { user: () => UserState.Loading() }),
+      model: modifyFields(model, { user: () => UserState.Loading() }),
       commands: [FetchUser({ userId })],
     }),
     SucceededFetchUser: ({ data }) => ({
-      model: evo(model, { user: () => UserState.Success({ data }) }),
+      model: modifyFields(model, { user: () => UserState.Success({ data }) }),
     }),
     FailedFetchUser: ({ error }) => ({
-      model: evo(model, { user: () => UserState.Failure({ error }) }),
+      model: modifyFields(model, { user: () => UserState.Failure({ error }) }),
     }),
   })

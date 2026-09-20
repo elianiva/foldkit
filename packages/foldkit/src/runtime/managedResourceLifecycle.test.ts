@@ -1,4 +1,4 @@
-import { Context, Effect, Fiber, Layer, Option, Schema as S } from 'effect'
+import { Context, Effect, Fiber, Layer, Option, Schema } from 'effect'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as Command from '../command/index.js'
@@ -6,9 +6,9 @@ import { __htmlBuilder } from '../html/index.js'
 import * as ManagedResource from '../managedResource/index.js'
 import { make } from '../managedResource/managedResource.js'
 import { defineMessageUnion } from '../message/index.js'
-import { evo } from '../struct/index.js'
+import { modifyFields } from '../struct/index.js'
 import type * as Update from '../update/index.js'
-import { makeElement } from './runtime.js'
+import { makeElement } from './makeElement.js'
 
 type EngineShape = Readonly<{ id: string }>
 
@@ -61,21 +61,21 @@ const Engine = ManagedResource.tag<EngineShape>()('Engine')
 type EngineServiceId = ManagedResource.ServiceOf<typeof Engine>
 
 const Message = defineMessageUnion({
-  RequestedEngine: { id: S.String },
+  RequestedEngine: { id: Schema.String },
   StoppedEngine: {},
   AcquiredEngine: {},
   ReleasedEngine: {},
-  FailedEngine: { error: S.String },
+  FailedEngine: { error: Schema.String },
   ClickedRead: {},
-  SucceededRead: { value: S.String },
+  SucceededRead: { value: Schema.String },
   FailedRead: {},
 })
 type Message = typeof Message.Type
 
-const Model = S.Struct({
-  requested: S.Option(S.String),
-  status: S.String,
-  readValue: S.String,
+const Model = Schema.Struct({
+  requested: Schema.Option(Schema.String),
+  status: Schema.String,
+  readValue: Schema.String,
 })
 type Model = typeof Model.Type
 
@@ -92,27 +92,31 @@ const ReadEngine = Command.define('ReadEngine', {
 const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, EngineServiceId>>(message, {
     RequestedEngine: ({ id }) => ({
-      model: evo(model, { requested: () => Option.some(id) }),
+      model: modifyFields(model, { requested: () => Option.some(id) }),
     }),
     StoppedEngine: () => ({
-      model: evo(model, { requested: () => Option.none() }),
+      model: modifyFields(model, { requested: () => Option.none() }),
     }),
-    AcquiredEngine: () => ({ model: evo(model, { status: () => 'acquired' }) }),
-    ReleasedEngine: () => ({ model: evo(model, { status: () => 'released' }) }),
+    AcquiredEngine: () => ({
+      model: modifyFields(model, { status: () => 'acquired' }),
+    }),
+    ReleasedEngine: () => ({
+      model: modifyFields(model, { status: () => 'released' }),
+    }),
     FailedEngine: ({ error }) => ({
-      model: evo(model, { status: () => `failed:${error}` }),
+      model: modifyFields(model, { status: () => `failed:${error}` }),
     }),
     ClickedRead: () => ({ model, commands: [ReadEngine()] }),
     SucceededRead: ({ value }) => ({
-      model: evo(model, { readValue: () => value }),
+      model: modifyFields(model, { readValue: () => value }),
     }),
     FailedRead: () => ({
-      model: evo(model, { readValue: () => 'unavailable' }),
+      model: modifyFields(model, { readValue: () => 'unavailable' }),
     }),
   })
 
 const managedResources = make<Model, Message>()(entry => ({
-  engine: entry(S.Option(S.Struct({ id: S.String })), {
+  engine: entry(Schema.Option(Schema.Struct({ id: Schema.String })), {
     resource: Engine,
     modelToMaybeRequirements: model =>
       Option.map(model.requested, id => ({ id })),

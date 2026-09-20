@@ -1,23 +1,22 @@
 import { Submodel } from 'foldkit'
 import type { Html } from 'foldkit/html'
 
+import { type CodeBlock } from '../../component'
 import { slotDocPage } from '../../markdown'
 import { type RenderHeadingLink, demoContainer } from '../../prose'
-import type { RenderCopyButton } from '../../view/codeBlock'
-import * as Disclosure from './disclosure'
+import * as Disclosure from './demo/disclosure'
 import raw from './disclosurePage.md'
 import type { Message } from './message'
 import type { Model } from './model'
 
-const { tableOfContents, view: renderPage } = slotDocPage<'basic'>(
-  raw,
-  'ui/disclosure',
-)
+const { tableOfContents, view: renderPage } = slotDocPage<
+  'basic' | 'collapsedPreview'
+>(raw, 'ui/disclosure')
 
 export { tableOfContents }
 
 type ViewInputs = Readonly<{
-  renderCopyButton: RenderCopyButton
+  renderCopyButton: CodeBlock.RenderCopyButton
   renderHeadingLink: RenderHeadingLink
 }>
 
@@ -27,6 +26,12 @@ export const view = Submodel.defineView<Model, Message, ViewInputs>(
       demos: {
         basic: demoContainer(
           ...Disclosure.basicDemo(model.isDisclosureDemoOpen, h),
+        ),
+        collapsedPreview: demoContainer(
+          ...Disclosure.collapsedPreviewDemo(
+            model.isDisclosureCollapsedPreviewDemoOpen,
+            h,
+          ),
         ),
       },
       renderCopyButton,

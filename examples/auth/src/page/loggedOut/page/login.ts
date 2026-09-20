@@ -1,13 +1,5 @@
 import { clsx } from 'clsx'
-import {
-  Array,
-  Duration,
-  Effect,
-  Option,
-  Schema as S,
-  String,
-  pipe,
-} from 'effect'
+import { Array, Duration, Effect, Option, Schema, String, pipe } from 'effect'
 import { Command, FieldValidation, Submodel, type Update } from 'foldkit'
 import {
   Field,
@@ -20,7 +12,7 @@ import {
 } from 'foldkit/fieldValidation'
 import { Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Button, Input } from '@foldkit/ui'
 
@@ -29,10 +21,10 @@ import { homeRouter } from '../../../route'
 
 // MODEL
 
-export const Model = S.Struct({
-  email: Field(S.String),
-  password: Field(S.String),
-  isSubmitting: S.Boolean,
+export const Model = Schema.Struct({
+  email: Field(Schema.String),
+  password: Field(Schema.String),
+  isSubmitting: Schema.Boolean,
 })
 
 export type Model = typeof Model.Type
@@ -46,11 +38,11 @@ export const initModel = (): Model => ({
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  ChangedEmail: { value: S.String },
-  ChangedPassword: { value: S.String },
+  ChangedEmail: { value: Schema.String },
+  ChangedPassword: { value: Schema.String },
   SubmittedForm: {},
   SucceededSimulateAuthRequest: { session: Session },
-  FailedSimulateAuthRequest: { error: S.String },
+  FailedSimulateAuthRequest: { error: Schema.String },
 })
 
 export type Message = typeof Message.Type
@@ -86,7 +78,7 @@ const isFormValid = (model: Model): boolean =>
 // UPDATE
 
 export const SimulateAuthRequest = Command.define('SimulateAuthRequest', {
-  args: { email: S.String, password: S.String },
+  args: { email: Schema.String, password: Schema.String },
   messages: [
     Message.SucceededSimulateAuthRequest,
     Message.FailedSimulateAuthRequest,
@@ -119,11 +111,11 @@ export const update = (model: Model, message: Message) =>
     message,
     {
       ChangedEmail: ({ value }) => ({
-        model: evo(model, { email: () => validateEmail(value) }),
+        model: modifyFields(model, { email: () => validateEmail(value) }),
       }),
 
       ChangedPassword: ({ value }) => ({
-        model: evo(model, { password: () => validatePassword(value) }),
+        model: modifyFields(model, { password: () => validatePassword(value) }),
       }),
 
       SubmittedForm: () => {
@@ -136,7 +128,7 @@ export const update = (model: Model, message: Message) =>
         }
 
         return {
-          model: evo(model, { isSubmitting: () => true }),
+          model: modifyFields(model, { isSubmitting: () => true }),
           commands: [
             SimulateAuthRequest({
               email: model.email.value,
@@ -152,7 +144,7 @@ export const update = (model: Model, message: Message) =>
       }),
 
       FailedSimulateAuthRequest: ({ error }) => ({
-        model: evo(model, {
+        model: modifyFields(model, {
           password: () =>
             Invalid({
               value: model.password.value,
@@ -196,6 +188,7 @@ const fieldView = (
       placeholder,
       onInput: onUpdate,
       isInvalid: field._tag === 'Invalid',
+      hasDescription: field._tag === 'Invalid',
       toView: attributes =>
         h.div(
           [],

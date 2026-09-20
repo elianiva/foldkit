@@ -1,4 +1,4 @@
-import { Schema as S } from 'effect'
+import { Schema } from 'effect'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { defineRouteUnion, defineTaggedUnion } from './index.js'
@@ -6,14 +6,14 @@ import { defineRouteUnion, defineTaggedUnion } from './index.js'
 const Submission = defineTaggedUnion({
   NotSubmitted: {},
   Submitting: {},
-  Failed: { error: S.String },
+  Failed: { error: Schema.String },
 })
 type Submission = typeof Submission.Type
 
 const AppRoute = defineRouteUnion({
   Home: {},
-  Person: { personId: S.Number },
-  NotFound: { path: S.String },
+  Person: { personId: Schema.Number },
+  NotFound: { path: Schema.String },
 })
 
 describe('defineTaggedUnion', () => {
@@ -30,12 +30,17 @@ describe('defineTaggedUnion', () => {
 
   it('decodes a member of the union', () => {
     expect(
-      S.decodeUnknownSync(Submission)({ _tag: 'Failed', error: 'timeout' }),
+      Schema.decodeUnknownSync(Submission)({
+        _tag: 'Failed',
+        error: 'timeout',
+      }),
     ).toStrictEqual({ _tag: 'Failed', error: 'timeout' })
   })
 
   it('rejects a tag the union does not declare', () => {
-    expect(() => S.decodeUnknownSync(Submission)({ _tag: 'Unknown' })).toThrow()
+    expect(() =>
+      Schema.decodeUnknownSync(Submission)({ _tag: 'Unknown' }),
+    ).toThrow()
   })
 
   it('works with exhaustive tag matching', () => {
@@ -50,6 +55,102 @@ describe('defineTaggedUnion', () => {
     expect(describeSubmission(Submission.Failed({ error: 'timeout' }))).toBe(
       'failed: timeout',
     )
+  })
+
+  it('matches selected tags and narrows the fallback to the rest', () => {
+    const describeSubmission = Submission.matchOrElse(
+      {
+        Failed: ({ error }) => `failed: ${error}`,
+      },
+      submission => {
+        expectTypeOf(submission).toEqualTypeOf<
+          | typeof Submission.NotSubmitted.Type
+          | typeof Submission.Submitting.Type
+        >()
+        return 'pending'
+      },
+    )
+
+    expect(describeSubmission(Submission.Failed({ error: 'timeout' }))).toBe(
+      'failed: timeout',
+    )
+    expect(describeSubmission(Submission.Submitting())).toBe('pending')
+  })
+
+  it('constrains partial match outputs explicitly', () => {
+    const isFailed = Submission.matchOrElse<boolean>(
+      {
+        Failed: ({ error }) => error === 'timeout',
+      },
+      () => false,
+    )
+
+    expectTypeOf(isFailed).toEqualTypeOf<(submission: Submission) => boolean>()
+    expect(isFailed(Submission.Failed({ error: 'timeout' }))).toBe(true)
+    expect(isFailed(Submission.NotSubmitted())).toBe(false)
+  })
+
+  it('keeps possibly absent case handlers in the fallback type', () => {
+    const maybeCases: Readonly<{
+      Failed?: (submission: typeof Submission.Failed.Type) => string
+    }> = {}
+    const describeSubmission = Submission.matchOrElse(
+      maybeCases,
+      submission => {
+        expectTypeOf(submission).toEqualTypeOf<Submission>()
+        return submission._tag
+      },
+    )
+
+    expect(describeSubmission(Submission.Failed({ error: 'timeout' }))).toBe(
+      'Failed',
+    )
+  })
+
+  it('preserves refined inputs in partial matching', () => {
+    type RefinedSubmission =
+      | typeof Submission.NotSubmitted.Type
+      | typeof Submission.Submitting.Type
+      | Readonly<{ _tag: 'Failed'; error: 'timeout' | 'offline' }>
+
+    const describeSubmission = (submission: RefinedSubmission) =>
+      Submission.matchOrElse(
+        submission,
+        {
+          Failed: ({ error }) => {
+            expectTypeOf(error).toEqualTypeOf<'timeout' | 'offline'>()
+            return `failed: ${error}`
+          },
+        },
+        remainingSubmission => {
+          expectTypeOf(remainingSubmission).toEqualTypeOf<
+            | typeof Submission.NotSubmitted.Type
+            | typeof Submission.Submitting.Type
+          >()
+          return 'pending'
+        },
+      )
+
+    expect(describeSubmission({ _tag: 'Failed', error: 'offline' })).toBe(
+      'failed: offline',
+    )
+
+    const describeRefinedSubmission = Submission.matchOrElse<
+      string,
+      RefinedSubmission
+    >(
+      {
+        Failed: ({ error }) => {
+          expectTypeOf(error).toEqualTypeOf<'timeout' | 'offline'>()
+          return `failed: ${error}`
+        },
+      },
+      () => 'pending',
+    )
+
+    expectTypeOf(describeRefinedSubmission).toEqualTypeOf<
+      (submission: RefinedSubmission) => string
+    >()
   })
 
   it('narrows a value with isAnyOf', () => {
@@ -85,9 +186,11 @@ describe('subsets', () => {
 
   it('builds a Schema from only the named variants', () => {
     expect(
-      S.decodeUnknownSync(Settled)({ _tag: 'Failed', error: 'timeout' }),
+      Schema.decodeUnknownSync(Settled)({ _tag: 'Failed', error: 'timeout' }),
     ).toStrictEqual({ _tag: 'Failed', error: 'timeout' })
-    expect(() => S.decodeUnknownSync(Settled)({ _tag: 'Submitting' })).toThrow()
+    expect(() =>
+      Schema.decodeUnknownSync(Settled)({ _tag: 'Submitting' }),
+    ).toThrow()
 
     expect(Settled.members).toStrictEqual([
       Submission.NotSubmitted,
@@ -109,6 +212,8 @@ describe('subsets', () => {
   if (false) {
     // @ts-expect-error A subset can contain only variants from its union
     Submission.subset(['Unknown'])
+    // @ts-expect-error A partial match can contain only variants from its union
+    Submission.matchOrElse({ Unknown: () => 'unknown' }, () => 'fallback')
   }
 })
 
@@ -117,12 +222,12 @@ describe('defineRouteUnion', () => {
     const person = AppRoute.Person({ personId: 42 })
 
     expect(person).toStrictEqual({ _tag: 'Person', personId: 42 })
-    expect(S.is(AppRoute)(person)).toBe(true)
+    expect(Schema.is(AppRoute)(person)).toBe(true)
   })
 
   it('exposes each variant as a schema in its own right', () => {
     expect(
-      S.decodeUnknownSync(AppRoute.NotFound)({
+      Schema.decodeUnknownSync(AppRoute.NotFound)({
         _tag: 'NotFound',
         path: '/missing',
       }),
@@ -132,11 +237,30 @@ describe('defineRouteUnion', () => {
   it('builds a Route subset Schema', () => {
     const PublicRoute = AppRoute.subset(['Home', 'NotFound'])
 
-    expect(S.is(PublicRoute)(AppRoute.Home())).toBe(true)
-    expect(S.is(PublicRoute)(AppRoute.Person({ personId: 42 }))).toBe(false)
+    expect(Schema.is(PublicRoute)(AppRoute.Home())).toBe(true)
+    expect(Schema.is(PublicRoute)(AppRoute.Person({ personId: 42 }))).toBe(
+      false,
+    )
     expectTypeOf(PublicRoute.Type).toEqualTypeOf<
       typeof AppRoute.Home.Type | typeof AppRoute.NotFound.Type
     >()
+  })
+
+  it('partially matches Routes', () => {
+    const routeTitle = AppRoute.matchOrElse(
+      {
+        Home: () => 'Home',
+      },
+      route => {
+        expectTypeOf(route).toEqualTypeOf<
+          typeof AppRoute.Person.Type | typeof AppRoute.NotFound.Type
+        >()
+        return route._tag
+      },
+    )
+
+    expect(routeTitle(AppRoute.Home())).toBe('Home')
+    expect(routeTitle(AppRoute.NotFound({ path: '/missing' }))).toBe('NotFound')
   })
 
   it('rejects a variant name that conflicts with a union property', () => {
@@ -155,5 +279,9 @@ describe('defineRouteUnion', () => {
     defineTaggedUnion({ subset: {} })
     // @ts-expect-error subset is reserved by Route unions
     defineRouteUnion({ subset: {} })
+    // @ts-expect-error matchOrElse is reserved by domain unions
+    defineTaggedUnion({ matchOrElse: {} })
+    // @ts-expect-error matchOrElse is reserved by Route unions
+    defineRouteUnion({ matchOrElse: {} })
   }
 })

@@ -1,10 +1,10 @@
 import { Option } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
+import { modifyFields } from 'foldkit/struct'
 import { fromString } from 'foldkit/url'
 import { describe, expect, test } from 'vitest'
 
 import { Listbox } from '@foldkit/ui'
-import { Message as ListboxMessage } from '@foldkit/ui/listbox'
 
 import {
   AppRoute,
@@ -103,15 +103,17 @@ describe('update', () => {
     test('clearing the search input fires a replacement', () => {
       story(
         update,
-        given({
-          ...browseModel,
-          route: AppRoute.Browse({
-            search: Option.some('foo'),
-            sorting: Sorting.Unsorted(),
-            diet: Option.none(),
-            period: Option.none(),
+        given(
+          modifyFields(browseModel, {
+            route: () =>
+              AppRoute.Browse({
+                search: Option.some('foo'),
+                sorting: Sorting.Unsorted(),
+                diet: Option.none(),
+                period: Option.none(),
+              }),
           }),
-        }),
+        ),
         message(Message.ChangedSearchInput({ value: '' })),
         Command.expectHas(ReplaceFilters),
         Command.resolve(ReplaceFilters, Message.CompletedReplaceFilters()),
@@ -138,23 +140,23 @@ describe('update', () => {
         given(browseModel),
         message(
           Message.GotDietListboxMessage({
-            message: ListboxMessage.Opened({
+            message: Listbox.Message.Opened({
               maybeActiveItemIndex: Option.none(),
             }),
           }),
         ),
         Command.resolve(
           Listbox.FocusItems,
-          ListboxMessage.CompletedFocusItems(),
+          Listbox.Message.CompletedFocusItems(),
         ),
         message(
           Message.GotDietListboxMessage({
-            message: ListboxMessage.SelectedItem({ item: 'Carnivore' }),
+            message: Listbox.Message.SelectedItem({ item: 'Carnivore' }),
           }),
         ),
         Command.resolve(
           Listbox.FocusButton,
-          ListboxMessage.CompletedFocusButton(),
+          Listbox.Message.CompletedFocusButton(),
         ),
         Command.expectHas(ReplaceFilters),
         Command.resolve(ReplaceFilters, Message.CompletedReplaceFilters()),

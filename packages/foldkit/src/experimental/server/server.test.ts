@@ -7,7 +7,7 @@ import { describe, it } from '@effect/vitest'
 import type { Document } from '../../html/index.js'
 import type { Html } from '../../html/index.js'
 import { __htmlBuilder, customElement } from '../../html/index.js'
-import type { RoutingApplicationConfigWithFlags } from '../../runtime/runtime.js'
+import type { RoutingApplicationConfigWithFlags } from '../../runtime/index.js'
 import type * as Update from '../../update/index.js'
 import type { Url } from '../../url/index.js'
 import type { VNode } from '../../vdom.js'
@@ -18,6 +18,7 @@ import {
 } from './server.js'
 
 const h = __htmlBuilder<never>()
+const unrestrictedTextarea = customElement<never>()('textarea')
 
 // NOTE: a hydratable render requires the deployment's build id, which every
 // case here supplies through this wrapper so each test keeps exercising what it
@@ -239,7 +240,7 @@ describe('renderToString', () => {
         const PrefixedTheme = Schema.String.pipe(
           Schema.decodeTo(
             Schema.String,
-            SchemaTransformation.transformOrFail({
+            SchemaTransformation.transformEffect({
               decode: raw =>
                 raw.startsWith('theme:')
                   ? Effect.succeed(raw.slice('theme:'.length))
@@ -633,13 +634,18 @@ describe('renderToString', () => {
     rendersHydratable(h.textarea([h.Value('model')]), '>model</textarea>'),
   )
 
-  it.effect('renders an uncontrolled textarea with text children', () =>
-    rendersHydratable(h.textarea([], ['hello']), '>hello</textarea>'),
+  it.effect(
+    'renders an internally constructed textarea with text children',
+    () =>
+      rendersHydratable(
+        unrestrictedTextarea([], ['hello']),
+        '>hello</textarea>',
+      ),
   )
 
   it.effect(
-    'rejects a textarea with element children parsing folds to text',
-    () => failsHydratableRender(h.textarea([], [h.b([], ['x'])])),
+    'rejects an internally constructed textarea whose elements parse to text',
+    () => failsHydratableRender(unrestrictedTextarea([], [h.b([], ['x'])])),
   )
 
   it.effect(
@@ -648,10 +654,10 @@ describe('renderToString', () => {
   )
 
   it.effect(
-    'pads an uncontrolled <textarea> with empty then newline-prefixed text',
+    'pads an internally constructed <textarea> before newline-prefixed text',
     () =>
       rendersHydratable(
-        h.textarea([], ['', '\nfirst']),
+        unrestrictedTextarea([], ['', '\nfirst']),
         '\n\nfirst</textarea>',
       ),
   )
@@ -890,7 +896,7 @@ describe('renderToString', () => {
         const AsyncTheme = Schema.String.pipe(
           Schema.decodeTo(
             Schema.String,
-            SchemaTransformation.transformOrFail({
+            SchemaTransformation.transformEffect({
               decode: raw => Effect.promise(() => Promise.resolve(raw)),
               encode: theme => Effect.succeed(theme),
             }),
@@ -907,25 +913,23 @@ describe('renderToString', () => {
       }),
   )
 
-  it.effect(
-    'defaults canonical and ogUrl to the request url for a routing render',
-    () =>
-      Effect.gen(function* () {
-        const plainView = (model: Model): Document => ({
-          title: `Page ${model.pathname}`,
-          body: h.div([], [h.h1([], [model.pathname])]),
-        })
-        const rendered = yield* renderToString(
-          { ...routingConfig, view: plainView },
-          {
-            url: 'https://example.com/deep/link?q=1',
-            flags: { theme: 'dark' },
-          },
-        )
+  it.effect('omits canonical and ogUrl when a routing view omits them', () =>
+    Effect.gen(function* () {
+      const plainView = (model: Model): Document => ({
+        title: `Page ${model.pathname}`,
+        body: h.div([], [h.h1([], [model.pathname])]),
+      })
+      const rendered = yield* renderToString(
+        { ...routingConfig, view: plainView },
+        {
+          url: 'https://example.com/deep/link?utm_source=newsletter',
+          flags: { theme: 'dark' },
+        },
+      )
 
-        expect(rendered.canonical).toBe('https://example.com/deep/link?q=1')
-        expect(rendered.ogUrl).toBe('https://example.com/deep/link?q=1')
-      }),
+      expect(rendered.canonical).toBeUndefined()
+      expect(rendered.ogUrl).toBeUndefined()
+    }),
   )
 
   it.effect('defaults ogUrl to an explicitly set canonical', () =>
@@ -945,8 +949,25 @@ describe('renderToString', () => {
     }),
   )
 
+  it.effect('returns an explicit ogUrl without canonical', () =>
+    Effect.gen(function* () {
+      const ogUrlView = (model: Model): Document => ({
+        title: `Page ${model.pathname}`,
+        ogUrl: 'https://example.com/social',
+        body: h.div([], [h.h1([], [model.pathname])]),
+      })
+      const rendered = yield* renderToString(
+        { ...routingConfig, view: ogUrlView },
+        { url: 'https://example.com/other', flags: { theme: 'dark' } },
+      )
+
+      expect(rendered.canonical).toBeUndefined()
+      expect(rendered.ogUrl).toBe('https://example.com/social')
+    }),
+  )
+
   it.effect(
-    'does not default canonical or ogUrl for a non-routing render',
+    'omits canonical and ogUrl when a non-routing view omits them',
     () =>
       Effect.gen(function* () {
         const rendered = yield* renderToString({
@@ -958,29 +979,6 @@ describe('renderToString', () => {
 
         expect(rendered.canonical).toBeUndefined()
         expect(rendered.ogUrl).toBeUndefined()
-      }),
-  )
-
-  it.effect(
-    'normalizes the default canonical to match the client location',
-    () =>
-      Effect.gen(function* () {
-        const plainView = (model: Model): Document => ({
-          title: `Page ${model.pathname}`,
-          body: h.div([], [h.h1([], [model.pathname])]),
-        })
-        const rendered = yield* renderToString(
-          { ...routingConfig, view: plainView },
-          {
-            url: 'https://EXAMPLE.com:443/a?q=1#frag',
-            flags: { theme: 'dark' },
-          },
-        )
-
-        // origin lowercases the host and drops the default port, and a canonical
-        // URL carries no fragment, matching the client's currentLocationUrl.
-        expect(rendered.canonical).toBe('https://example.com/a?q=1')
-        expect(rendered.ogUrl).toBe('https://example.com/a?q=1')
       }),
   )
 

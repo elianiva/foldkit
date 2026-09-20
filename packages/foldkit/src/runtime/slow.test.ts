@@ -1,18 +1,18 @@
-import { Effect, Fiber, Number, Option, Schema as S, Stream } from 'effect'
+import { Effect, Fiber, Number, Option, Schema, Stream } from 'effect'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { __htmlBuilder } from '../html/index.js'
 import { defineMessageUnion } from '../message/index.js'
-import { evo } from '../struct/index.js'
+import { modifyFields } from '../struct/index.js'
 import * as Subscription from '../subscription/subscription.js'
 import type * as Update from '../update/index.js'
+import { makeElement } from './makeElement.js'
 import {
   type SlowContext,
   type SlowSubscriptionDependenciesContext,
   type SlowUpdateContext,
   __resolveSlowConfig,
-  makeElement,
-} from './runtime.js'
+} from './slowPhase.js'
 
 const Message = defineMessageUnion({
   ClickedIncrement: {},
@@ -20,13 +20,13 @@ const Message = defineMessageUnion({
 })
 type Message = typeof Message.Type
 
-const Model = S.Struct({ count: S.Number })
+const Model = Schema.Struct({ count: Schema.Number })
 type Model = typeof Model.Type
 
 const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedIncrement: () => ({
-      model: evo(model, { count: Number.increment }),
+      model: modifyFields(model, { count: Number.increment }),
     }),
     ClickedKeptModel: () => ({ model }),
   })
@@ -57,7 +57,7 @@ const sameModelReferenceView = (model: Model) => {
 
 const subscriptions = Subscription.make<Model, Message>()(entry => ({
   count: entry(
-    { count: S.Number },
+    { count: Schema.Number },
     {
       modelToDependencies: model => ({ count: model.count }),
       dependenciesToStream: () => Stream.empty,

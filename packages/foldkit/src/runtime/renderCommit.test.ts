@@ -1,4 +1,4 @@
-import { Effect, Fiber, Schema as S } from 'effect'
+import { Effect, Fiber, Schema } from 'effect'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as Command from '../command/index.js'
@@ -7,7 +7,7 @@ import { defineMessageUnion } from '../message/index.js'
 import { RenderCommit, createCommitNotifier } from '../render/commit.js'
 import { afterCommit } from '../render/render.js'
 import type * as Update from '../update/index.js'
-import { makeElement } from './runtime.js'
+import { makeElement } from './makeElement.js'
 
 describe('afterCommit', () => {
   it('resumes on a commit that lands after it registered', async () => {
@@ -129,7 +129,7 @@ const Message = defineMessageUnion({
 })
 type Message = typeof Message.Type
 
-const Model = S.Struct({ label: S.String })
+const Model = Schema.Struct({ label: Schema.String })
 type Model = typeof Model.Type
 
 const h = __htmlBuilder<Message>()

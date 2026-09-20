@@ -1,11 +1,11 @@
 import { Option } from 'effect'
 import { Calendar } from 'foldkit'
 import { Command, given, message, model, story } from 'foldkit/story'
+import { modifyFields } from 'foldkit/struct'
 import { fromString } from 'foldkit/url'
 import { describe, expect, test } from 'vitest'
 
 import { Dialog } from '@foldkit/ui'
-import { Message as DialogMessage } from '@foldkit/ui/dialog'
 
 import { AppRoute, Message, type Model, update } from './main'
 import { uiInit } from './ui/init'
@@ -98,16 +98,14 @@ describe('update', () => {
 
   describe('mobile menu', () => {
     test('navigating to a new URL closes the mobile menu dialog', () => {
-      const modelWithOpenMenu: Model = {
-        ...initialModel,
-        uiModel: {
-          ...initialModel.uiModel,
-          mobileMenuDialog: Dialog.init({
-            id: 'mobile-menu',
-            isOpen: true,
-          }),
-        },
-      }
+      const modelWithOpenMenu: Model = modifyFields(initialModel, {
+        uiModel: modifyFields({
+          mobileMenuDialog: () =>
+            Dialog.boot({
+              id: 'mobile-menu',
+            }).model,
+        }),
+      })
 
       story(
         update,
@@ -117,7 +115,7 @@ describe('update', () => {
         ),
         Command.resolve(
           Dialog.CloseDialog,
-          DialogMessage.CompletedCloseDialog(),
+          Dialog.Message.CompletedCloseDialog(),
         ),
         model(model => {
           expect(model.uiModel.mobileMenuDialog.isOpen).toBe(false)

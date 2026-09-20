@@ -1,6 +1,6 @@
-import { Array, Match as M, Option, String, pipe } from 'effect'
+import { Array, Match, Option, String, pipe } from 'effect'
 import { Update } from 'foldkit'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { DragAndDrop } from '@foldkit/ui'
 
@@ -42,9 +42,9 @@ const announceKeyboardDrag = (
   model: Model,
   nextDragAndDrop: DragAndDrop.Model,
 ): string =>
-  M.value(nextDragAndDrop.dragState).pipe(
-    M.withReturnType<string>(),
-    M.tag('KeyboardDragging', nextState => {
+  Match.value(nextDragAndDrop.dragState).pipe(
+    Match.withReturnType<string>(),
+    Match.tag('KeyboardDragging', nextState => {
       const wasIdle = model.dragAndDrop.dragState._tag === 'Idle'
       if (wasIdle) {
         const title = findCardTitle(model.columns, nextState.itemId)
@@ -70,7 +70,7 @@ const announceKeyboardDrag = (
 
       return model.announcement
     }),
-    M.orElse(() => model.announcement),
+    Match.orElse(() => model.announcement),
   )
 
 const screenReaderTextForDrop = (
@@ -107,7 +107,7 @@ const foldDragAndDropOutMessage: (
           toIndex,
         )
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             columns: () => nextColumns,
             announcement: () =>
               screenReaderTextForDrop(previousModel, outMessage),
@@ -116,7 +116,7 @@ const foldDragAndDropOutMessage: (
         }
       },
       Cancelled: () => ({
-        model: evo(model, {
+        model: modifyFields(model, {
           announcement: () =>
             screenReaderTextForDrop(previousModel, outMessage),
         }),
@@ -128,7 +128,7 @@ const foldDragAndDrop = (previousModel: Model) =>
     update: DragAndDrop.update,
     read: (model: Model) => Option.some(model.dragAndDrop),
     write: (model, nextDragAndDrop) =>
-      evo(model, {
+      modifyFields(model, {
         dragAndDrop: () => nextDragAndDrop,
         announcement: () => announceKeyboardDrag(model, nextDragAndDrop),
       }),
@@ -142,7 +142,7 @@ export const update = (model: Model, message: Message) =>
       foldDragAndDrop(model)(model, message),
 
     ClickedAddCard: ({ columnId }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         maybeNewCardColumnId: () => Option.some(columnId),
         newCardTitle: () => '',
       }),
@@ -150,7 +150,7 @@ export const update = (model: Model, message: Message) =>
     }),
 
     ChangedNewCardTitle: ({ value }) => ({
-      model: evo(model, { newCardTitle: () => value }),
+      model: modifyFields(model, { newCardTitle: () => value }),
     }),
 
     SubmittedNewCard: () =>
@@ -183,7 +183,7 @@ export const update = (model: Model, message: Message) =>
       })
 
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           columns: () => nextColumns,
           maybeNewCardColumnId: () => Option.none(),
           newCardTitle: () => '',
@@ -193,7 +193,7 @@ export const update = (model: Model, message: Message) =>
     },
 
     CancelledNewCard: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         maybeNewCardColumnId: () => Option.none(),
         newCardTitle: () => '',
       }),

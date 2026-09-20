@@ -1,9 +1,9 @@
 import { clsx } from 'clsx'
-import { Schema as S } from 'effect'
+import { Schema } from 'effect'
 import { CustomElement, Runtime, type Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import 'vanilla-colorful/hex-color-picker.js'
 
 import { Button, Input } from '@foldkit/ui'
@@ -11,19 +11,19 @@ import '@shoelace-style/shoelace/dist/components/qr-code/qr-code.js'
 
 // MODEL
 
-export const Model = S.Struct({
-  content: S.String,
-  fillColor: S.String,
-  backgroundColor: S.String,
+export const Model = Schema.Struct({
+  content: Schema.String,
+  fillColor: Schema.String,
+  backgroundColor: Schema.String,
 })
 export type Model = typeof Model.Type
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  UpdatedContent: { value: S.String },
-  ChangedFillColor: { value: S.String },
-  ChangedBackgroundColor: { value: S.String },
+  UpdatedContent: { value: Schema.String },
+  ChangedFillColor: { value: Schema.String },
+  ChangedBackgroundColor: { value: Schema.String },
 })
 
 export type Message = typeof Message.Type
@@ -47,13 +47,13 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     UpdatedContent: ({ value }) => ({
-      model: evo(model, { content: () => value }),
+      model: modifyFields(model, { content: () => value }),
     }),
     ChangedFillColor: ({ value }) => ({
-      model: evo(model, { fillColor: () => value }),
+      model: modifyFields(model, { fillColor: () => value }),
     }),
     ChangedBackgroundColor: ({ value }) => ({
-      model: evo(model, { backgroundColor: () => value }),
+      model: modifyFields(model, { backgroundColor: () => value }),
     }),
   })
 
@@ -62,22 +62,22 @@ export const update = (model: Model, message: Message) =>
 export const hexColorPicker = CustomElement.define({
   tag: 'hex-color-picker',
   properties: {
-    color: S.String,
+    color: Schema.String,
   },
   events: {
-    'color-changed': S.Struct({ value: S.String }),
+    'color-changed': Schema.Struct({ value: Schema.String }),
   },
 })
 
 const qrCode = CustomElement.define({
   tag: 'sl-qr-code',
   properties: {
-    value: S.String,
-    label: S.String,
-    size: S.Number,
-    fill: S.String,
-    background: S.String,
-    radius: S.Number,
+    value: Schema.String,
+    label: Schema.String,
+    size: Schema.Number,
+    fill: Schema.String,
+    background: Schema.String,
+    radius: Schema.Number,
   },
   events: {},
 })

@@ -1,13 +1,13 @@
-import { Array, Schema as S } from 'effect'
+import { Array, Schema } from 'effect'
 import { type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 
 // MODEL
 
-const Filter = S.Literals(['All', 'Active', 'Done'])
+const Filter = Schema.Literals(['All', 'Active', 'Done'])
 
-export const Model = S.Struct({
-  todos: S.Array(Todo),
+export const Model = Schema.Struct({
+  todos: Schema.Array(Todo),
   filter: Filter,
 })
 type Model = typeof Model.Type
@@ -26,12 +26,12 @@ type Message = typeof Message.Type
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     AddedTodo: () => ({
-      model: evo(model, { todos: Array.append(emptyTodo()) }),
+      model: modifyFields(model, { todos: Array.append(emptyTodo()) }),
     }),
     ClearedDoneTodos: () => ({
-      model: evo(model, { todos: Array.filter(todo => !todo.done) }),
+      model: modifyFields(model, { todos: Array.filter(todo => !todo.done) }),
     }),
     SelectedFilter: ({ filter }) => ({
-      model: evo(model, { filter: () => filter }),
+      model: modifyFields(model, { filter: () => filter }),
     }),
   })

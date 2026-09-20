@@ -1,9 +1,9 @@
-import { Array, Option, Record, pipe } from 'effect'
-import { AsyncData, type Update } from 'foldkit'
-import { evo } from 'foldkit/struct'
+import { Array, Effect, Option, Record, Schema, pipe } from 'effect'
+import { AsyncData, Command, type Update } from 'foldkit'
+import { modifyFields } from 'foldkit/struct'
 
-import { LoadApiData } from './command'
 import {
+  ParsedApiReference,
   SIGNATURE_COLLAPSE_THRESHOLD,
   scopedId,
   signaturesLength,
@@ -15,6 +15,40 @@ import {
   type Disclosures,
   type Model,
 } from './model'
+
+const LoadApiData = Command.define('LoadApiData', {
+  messages: [Message.SucceededLoadApiData, Message.FailedLoadApiData],
+  execute: Effect.gen(function* () {
+    const [parsedApiModule, highlightsModule] = yield* Effect.tryPromise({
+      try: () =>
+        Promise.all([
+          import('virtual:parsed-api'),
+          import('virtual:api-highlights'),
+        ]),
+      catch: error =>
+        error instanceof Error ? error.message : 'Unknown error',
+    })
+
+    const parsedApi = Schema.decodeUnknownSync(ParsedApiReference)(
+      parsedApiModule.default,
+    )
+
+    return Message.SucceededLoadApiData({
+      apiData: {
+        parsedApi,
+        highlights: highlightsModule.default,
+      },
+    })
+  }).pipe(
+    Effect.catch(error =>
+      Effect.succeed(
+        Message.FailedLoadApiData({
+          error: typeof error === 'string' ? error : 'Failed to load API data',
+        }),
+      ),
+    ),
+  ),
+})
 
 export type UpdateReturn = Update.Return<Model, Message>
 
@@ -43,26 +77,26 @@ export const update = (model: Model, message: Message) =>
       Option.match(AsyncData.loadIfMissing(model.apiData), {
         onNone: () => ({ model }),
         onSome: apiData => ({
-          model: evo(model, { apiData: () => apiData }),
+          model: modifyFields(model, { apiData: () => apiData }),
           commands: [LoadApiData()],
         }),
       }),
 
     SucceededLoadApiData: ({ apiData }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         apiData: () => ApiDataAsyncData.Success({ data: apiData }),
         disclosures: () => disclosuresForApiData(apiData),
       }),
     }),
 
     FailedLoadApiData: ({ error }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         apiData: () => ApiDataAsyncData.Failure({ error }),
       }),
     }),
 
     ToggledSignature: ({ id, isOpen }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         disclosures: disclosures => Record.set(disclosures, id, isOpen),
       }),
     }),

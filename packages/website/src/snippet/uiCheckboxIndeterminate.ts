@@ -1,17 +1,17 @@
 // Pseudocode walkthrough of the Foldkit integration points. Each labeled
 // block below is an excerpt. Fit them into your own Model, init, Message,
 // update, and view definitions.
-import { Schema as S } from 'effect'
+import { Schema } from 'effect'
 import type { HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Checkbox } from '@foldkit/ui'
 
 // Store each child's checked state as a plain boolean field in your Model:
-const Model = S.Struct({
-  optionA: S.Boolean,
-  optionB: S.Boolean,
+const Model = Schema.Struct({
+  optionA: Schema.Boolean,
+  optionB: Schema.Boolean,
   // ...your other fields
 })
 
@@ -28,15 +28,15 @@ const init = () => ({
 // the new checked state:
 
 const Message = defineMessageUnion({
-  ToggledSelectAll: { isChecked: S.Boolean },
-  ToggledOptionA: { isChecked: S.Boolean },
-  ToggledOptionB: { isChecked: S.Boolean },
+  ToggledSelectAll: { isChecked: Schema.Boolean },
+  ToggledOptionA: { isChecked: Schema.Boolean },
+  ToggledOptionB: { isChecked: Schema.Boolean },
 })
 
 // In the corresponding Message.match handler, toggling "Select All"
 // writes the same value to every child:
 ToggledSelectAll: ({ isChecked }) => ({
-  model: evo(model, {
+  model: modifyFields(model, {
     optionA: () => isChecked,
     optionB: () => isChecked,
   }),

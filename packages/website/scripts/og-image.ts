@@ -1,13 +1,5 @@
 import { FileSystem } from 'effect'
-import {
-  Array,
-  Console,
-  Effect,
-  Match as M,
-  Option,
-  String as String_,
-  pipe,
-} from 'effect'
+import { Array, Console, Effect, Match, Option, String, pipe } from 'effect'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { type Browser } from 'playwright'
@@ -17,7 +9,7 @@ import { Resvg } from '@resvg/resvg-js'
 
 import { type PostCover, maybePostCover } from '../src/page/blog/frontmatter'
 import { BLOG_AUTHOR, BLOG_SECTION } from '../src/page/blog/meta'
-import { type AppRoute } from '../src/route'
+import { type AppRoute, SITE_URL } from '../src/route'
 import {
   type BlogPostEntry,
   PUBLIC_DIR,
@@ -206,11 +198,11 @@ const urlPathToSlug = (urlPath: string): string => {
 // COVER IMAGES
 
 const maybeRoutePostEntry = (route: AppRoute): Option.Option<BlogPostEntry> =>
-  M.value(route).pipe(
-    M.tag('BlogPost', ({ postSlug }) =>
+  Match.value(route).pipe(
+    Match.tag('BlogPost', ({ postSlug }) =>
       Array.findFirst(blogPosts, ({ slug }) => slug === postSlug),
     ),
-    M.orElse(() => Option.none()),
+    Match.orElse(() => Option.none()),
   )
 
 const maybeRouteCover = (route: AppRoute): Option.Option<PostCover> =>
@@ -230,9 +222,7 @@ const coverMimeType = (src: string): Effect.Effect<string, Error> =>
 // NOTE: Chromium decodes the cover and re-encodes it as PNG because resvg
 // cannot embed webp sources, and PNG is the one format every OG consumer
 // renders. The cover is center-cropped onto the standard 1200x630 card so
-// every platform shows the same crop instead of choosing its own. The
-// string-form evaluate polyfills the `__name` helper tsx injects into
-// compiled callbacks; see the note on PAGE_INIT_SCRIPT in prerender.ts.
+// every platform shows the same crop instead of choosing its own.
 const renderCoverOgImage = (browser: Browser, cover: PostCover) =>
   Effect.gen(function* () {
     const mimeType = yield* coverMimeType(cover.src)
@@ -244,9 +234,6 @@ const renderCoverOgImage = (browser: Browser, cover: PostCover) =>
       Effect.tryPromise(() => browser.newPage()),
       page =>
         Effect.gen(function* () {
-          yield* Effect.tryPromise(() =>
-            page.evaluate('window.__name = (target) => target'),
-          )
           return yield* Effect.tryPromise(() =>
             page.evaluate(
               async ({ source, targetHeight, targetWidth }) => {
@@ -346,7 +333,10 @@ const renderOgImage =
         yield* Console.log(`  ✓ og/${slug}.png`)
       }),
       Effect.mapError(
-        error => new Error(`og/${slug}.png failed to render: ${String(error)}`),
+        error =>
+          new Error(
+            `og/${slug}.png failed to render: ${globalThis.String(error)}`,
+          ),
       ),
     )
   }
@@ -382,8 +372,6 @@ export const generateOgImages = (
   })
 
 // STRUCTURED DATA
-
-const SITE_URL = 'https://foldkit.dev'
 
 const SITE_NAME = 'Foldkit'
 
@@ -489,12 +477,12 @@ const sitePageJsonLd = (
   })
 
 const maybeSitePageSchemaType = (route: AppRoute): Option.Option<string> =>
-  M.value(route).pipe(
-    M.withReturnType<Option.Option<string>>(),
-    M.tag('About', () => Option.some('AboutPage')),
-    M.tag('Contact', () => Option.some('ContactPage')),
-    M.tag('Privacy', () => Option.some('WebPage')),
-    M.orElse(() => Option.none()),
+  Match.value(route).pipe(
+    Match.withReturnType<Option.Option<string>>(),
+    Match.tag('About', () => Option.some('AboutPage')),
+    Match.tag('Contact', () => Option.some('ContactPage')),
+    Match.tag('Privacy', () => Option.some('WebPage')),
+    Match.orElse(() => Option.none()),
   )
 
 const blogPostingJsonLd = (
@@ -549,7 +537,7 @@ export const injectMetaTags = (
   const ogImageAlt = pipe(
     maybeRouteCover(route),
     Option.map(cover => cover.alt),
-    Option.filter(String_.isNonEmpty),
+    Option.filter(String.isNonEmpty),
     Option.getOrElse(() => generatedOgImageAlt(metadata)),
   )
 

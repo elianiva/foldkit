@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Array, Effect, Match as M, Option, Schema as S, pipe } from 'effect'
+import { Array, Effect, Match, Option, Schema, pipe } from 'effect'
 import {
   Calendar,
   Command,
@@ -13,17 +13,17 @@ import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
 import { defineRouteUnion, literal } from 'foldkit/route'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { Url, toString as urlToString } from 'foldkit/url'
 
 import { Dialog, Nav } from '@foldkit/ui'
 
 import * as Icon from './icon'
 import { uiInit } from './ui/init'
-import { UiMessage } from './ui/message'
+import { Message as UiMessage } from './ui/message'
 import { UiModel } from './ui/model'
 import * as UiSubscriptions from './ui/subscriptions'
-import { uiUpdate } from './ui/update'
+import { closeMobileMenu, openMobileMenu, uiUpdate } from './ui/update'
 import * as View from './ui/view'
 
 // ROUTE
@@ -55,7 +55,7 @@ export const AppRoute = defineRouteUnion({
   Tooltip: {},
   Animation: {},
   VirtualList: {},
-  NotFound: { path: S.String },
+  NotFound: { path: Schema.String },
 })
 
 export type AppRoute = typeof AppRoute.Type
@@ -144,7 +144,7 @@ const urlToAppRoute = Route.parseUrlWithFallback(routeParser, AppRoute.NotFound)
 
 // MODEL
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   route: AppRoute,
   uiModel: UiModel,
 })
@@ -158,6 +158,7 @@ export const Message = defineMessageUnion({
   CompletedLoadExternal: {},
   ClickedLink: { request: UrlRequest },
   ChangedUrl: { url: Url },
+  ClickedOpenMobileMenu: {},
   GotUiMessage: { message: UiMessage },
 })
 
@@ -166,14 +167,14 @@ export type Message = typeof Message.Type
 // COMMAND
 
 const NavigateInternal = Command.define('NavigateInternal', {
-  args: { url: S.String },
+  args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
   execute: ({ url }) =>
     pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 })
 
 const LoadExternal = Command.define('LoadExternal', {
-  args: { href: S.String },
+  args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
   execute: ({ href }) =>
     load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
@@ -181,7 +182,7 @@ const LoadExternal = Command.define('LoadExternal', {
 
 // INIT
 
-export const Flags = S.Struct({
+export const Flags = Schema.Struct({
   today: Calendar.CalendarDate,
 })
 
@@ -196,53 +197,39 @@ export const init: Runtime.RoutingApplicationInit<Model, Message, Flags> = (
   flags: Flags,
   url: Url,
 ) => {
-  const uiInit_ = uiInit(flags.today)
-
-  return {
-    model: {
-      route: urlToAppRoute(url),
-      uiModel: uiInit_.model,
-    },
-    commands: Command.mapMessages(uiInit_.commands, message =>
-      Message.GotUiMessage({ message }),
-    ),
-  }
+  return Update.foldChildInit(uiInit(flags.today), {
+    toParentModel: uiModel => ({ route: urlToAppRoute(url), uiModel }),
+    toParentMessage: message => Message.GotUiMessage({ message }),
+  })
 }
 
 // UPDATE
 
-const toUiMessage = (message: typeof UiMessage.Type): Message =>
+const toUiMessage = (message: UiMessage): Message =>
   Message.GotUiMessage({ message })
-
-const toMobileMenuDialogMessage = (message: Dialog.Message): Message =>
-  Message.GotUiMessage({
-    message: UiMessage.GotMobileMenuDialogMessage({ message }),
-  })
 
 const foldUi = Update.foldChild({
   update: uiUpdate,
   read: (model: Model) => Option.some(model.uiModel),
-  write: (model, nextUiModel) => evo(model, { uiModel: () => nextUiModel }),
+  write: (model, nextUiModel) =>
+    modifyFields(model, { uiModel: () => nextUiModel }),
   toParentMessage: toUiMessage,
 })
 
-const foldMobileMenuDialogOutMessage = M.type<Dialog.OutMessage>().pipe(
-  M.withReturnType<Update.Step<Model, Message>>(),
-  M.tagsExhaustive({
-    Opened: () => model => ({ model }),
-    Closed: () => model => ({ model }),
-  }),
-)
+const foldUiOpenMobileMenu = Update.foldChildStep({
+  update: openMobileMenu,
+  read: (model: Model) => Option.some(model.uiModel),
+  write: (model, nextUiModel) =>
+    modifyFields(model, { uiModel: () => nextUiModel }),
+  toParentMessage: toUiMessage,
+})
 
-const foldMobileMenuDialogClose = Update.foldChildStep({
-  update: Dialog.close,
-  read: (model: Model) => Option.some(model.uiModel.mobileMenuDialog),
-  write: (model, nextMobileMenuDialog) =>
-    evo(model, {
-      uiModel: evo({ mobileMenuDialog: () => nextMobileMenuDialog }),
-    }),
-  toParentMessage: toMobileMenuDialogMessage,
-  foldOutMessage: foldMobileMenuDialogOutMessage,
+const foldUiCloseMobileMenu = Update.foldChildStep({
+  update: closeMobileMenu,
+  read: (model: Model) => Option.some(model.uiModel),
+  write: (model, nextUiModel) =>
+    modifyFields(model, { uiModel: () => nextUiModel }),
+  toParentMessage: toUiMessage,
 })
 
 type UpdateReturn = Update.Return<Model, Message>
@@ -267,10 +254,12 @@ export const update = (model: Model, message: Message) =>
     ChangedUrl: ({ url }) =>
       Update.combine(model, [
         stepModel => ({
-          model: evo(stepModel, { route: () => urlToAppRoute(url) }),
+          model: modifyFields(stepModel, { route: () => urlToAppRoute(url) }),
         }),
-        foldMobileMenuDialogClose,
+        foldUiCloseMobileMenu,
       ]),
+
+    ClickedOpenMobileMenu: () => foldUiOpenMobileMenu(model),
 
     GotUiMessage: ({ message }) => foldUi(model, message),
   })
@@ -348,7 +337,7 @@ const componentNav = (
     toView,
   })
 
-const navListView = (
+const navListView = <Message>(
   items: ReadonlyArray<Nav.ItemInfo>,
   linkClassName: (isActive: boolean) => string,
   h: HtmlBuilder<Message>,
@@ -421,7 +410,7 @@ const sidebarView = (currentRoute: AppRoute, h: HtmlBuilder<Message>): Html =>
 const mobileMenuContent = (
   currentRoute: AppRoute,
   closeButton: Dialog.RenderInfo['closeButton'],
-  h: HtmlBuilder<Message>,
+  h: HtmlBuilder<UiMessage>,
 ): Html =>
   h.div(
     [h.Class('flex flex-col h-full')],
@@ -510,17 +499,25 @@ const mobileHeaderView = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
           h.AriaExpanded(model.uiModel.mobileMenuDialog.isOpen),
           h.AriaLabel('Toggle menu'),
-          h.OnClick(toUiMessage(UiMessage.ClickedOpenMobileMenu())),
+          h.OnClick(Message.ClickedOpenMobileMenu()),
         ],
         [Icon.menu('w-6 h-6')],
       ),
     ],
   )
 
-const mobileMenuView = (model: Model, h: HtmlBuilder<Message>): Html =>
+type MobileMenuViewInputs = Readonly<{
+  currentRoute: AppRoute
+}>
+
+const mobileMenuDialogView = Submodel.defineView<
+  UiModel,
+  UiMessage,
+  MobileMenuViewInputs
+>((model, { currentRoute }, h): Html =>
   h.submodel({
-    slotId: model.uiModel.mobileMenuDialog.id,
-    model: model.uiModel.mobileMenuDialog,
+    slotId: model.mobileMenuDialog.id,
+    model: model.mobileMenuDialog,
     view: Dialog.view,
     viewInputs: {
       toView: ({ dialog, backdrop, panel, closeButton, isVisible }) =>
@@ -534,13 +531,24 @@ const mobileMenuView = (model: Model, h: HtmlBuilder<Message>): Html =>
                     ...panel,
                     h.Class('fixed inset-0 z-[60] bg-white flex flex-col'),
                   ],
-                  [mobileMenuContent(model.route, closeButton, h)],
+                  [mobileMenuContent(currentRoute, closeButton, h)],
                 ),
               ]
             : [],
         ),
     },
-    toParentMessage: message => toMobileMenuDialogMessage(message),
+    toParentMessage: message =>
+      UiMessage.GotMobileMenuDialogMessage({ message }),
+  }),
+)
+
+const mobileMenuView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.submodel({
+    slotId: 'mobile-menu',
+    model: model.uiModel,
+    view: mobileMenuDialogView,
+    viewInputs: { currentRoute: model.route },
+    toParentMessage: toUiMessage,
   })
 
 const homeView = (h: HtmlBuilder<Message>): Html =>
@@ -626,9 +634,9 @@ const contentView = (model: Model, h: HtmlBuilder<Message>): Html => {
 }
 
 const routeTitle = (route: Model['route']): string =>
-  M.value(route).pipe(
-    M.tag('Home', () => 'Foldkit UI Showcase'),
-    M.orElse(({ _tag }) => `${_tag} | Foldkit UI Showcase`),
+  Match.value(route).pipe(
+    Match.tag('Home', () => 'Foldkit UI Showcase'),
+    Match.orElse(({ _tag }) => `${_tag} | Foldkit UI Showcase`),
   )
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({

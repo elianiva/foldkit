@@ -3,33 +3,33 @@ import {
   Array,
   Duration,
   Effect,
-  Match as M,
+  Match,
   Number,
   Option,
-  Schema as S,
+  Schema,
   pipe,
 } from 'effect'
 import { Command, Runtime, type Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 // MODEL
 
-export const UploadStatus = S.Literals(['Uploading', 'Done', 'Cancelled'])
+export const UploadStatus = Schema.Literals(['Uploading', 'Done', 'Cancelled'])
 export type UploadStatus = typeof UploadStatus.Type
 
-export const Upload = S.Struct({
-  id: S.Number,
-  fileName: S.String,
-  sizeMegabytes: S.Number,
+export const Upload = Schema.Struct({
+  id: Schema.Number,
+  fileName: Schema.String,
+  sizeMegabytes: Schema.Number,
   status: UploadStatus,
 })
 export type Upload = typeof Upload.Type
 
-export const Model = S.Struct({
-  uploadId: S.Number,
-  uploads: S.Array(Upload),
+export const Model = Schema.Struct({
+  uploadId: Schema.Number,
+  uploads: Schema.Array(Upload),
 })
 export type Model = typeof Model.Type
 
@@ -37,12 +37,12 @@ export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
   ClickedStartUpload: {},
-  ClickedCancelUpload: { uploadId: S.Number },
+  ClickedCancelUpload: { uploadId: Schema.Number },
   ClickedCancelAllUploads: {},
-  ClickedRestartUpload: { uploadId: S.Number },
-  SucceededUploadFile: { uploadId: S.Number },
+  ClickedRestartUpload: { uploadId: Schema.Number },
+  SucceededUploadFile: { uploadId: Schema.Number },
   CompletedCancelUploadFile: {
-    uploadId: S.Number,
+    uploadId: Schema.Number,
     outcome: Command.Interruptible.Outcome,
   },
 })
@@ -62,7 +62,10 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
 
 // FAKE FILES
 
-export const FakeFile = S.Struct({ name: S.String, sizeMegabytes: S.Number })
+export const FakeFile = Schema.Struct({
+  name: Schema.String,
+  sizeMegabytes: Schema.Number,
+})
 export type FakeFile = typeof FakeFile.Type
 
 export const FAKE_FILES: Array.NonEmptyReadonlyArray<FakeFile> = [
@@ -84,11 +87,11 @@ const fakeFileForUpload = (uploadId: number): FakeFile =>
 
 const MILLISECONDS_PER_MEGABYTE = 100
 
-export const UploadKey = S.Struct({ uploadId: S.Number })
+export const UploadKey = Schema.Struct({ uploadId: Schema.Number })
 export type UploadKey = typeof UploadKey.Type
 
 export const UploadFile = Command.define('UploadFile', {
-  args: { ...UploadKey.fields, sizeMegabytes: S.Number },
+  args: { ...UploadKey.fields, sizeMegabytes: Schema.Number },
   messages: [Message.SucceededUploadFile],
   interrupt: {
     keyFields: ['uploadId'],
@@ -112,7 +115,9 @@ export const CancelUploadFile = ({ uploadId }: UploadKey) =>
 
 const setStatusForId = (uploadId: number, status: UploadStatus) =>
   Array.map((upload: Upload) =>
-    upload.id === uploadId ? evo(upload, { status: () => status }) : upload,
+    upload.id === uploadId
+      ? modifyFields(upload, { status: () => status })
+      : upload,
   )
 
 type UpdateReturn = Update.Return<Model, Message>
@@ -128,7 +133,7 @@ export const update = (model: Model, message: Message) =>
         status: 'Uploading',
       })
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           uploadId: Number.increment,
           uploads: Array.append(startedUpload),
         }),
@@ -166,7 +171,7 @@ export const update = (model: Model, message: Message) =>
         Option.match({
           onNone: () => ({ model }),
           onSome: upload => ({
-            model: evo(model, {
+            model: modifyFields(model, {
               uploads: setStatusForId(uploadId, 'Uploading'),
             }),
             commands: [
@@ -177,13 +182,13 @@ export const update = (model: Model, message: Message) =>
       ),
 
     SucceededUploadFile: ({ uploadId }) => ({
-      model: evo(model, { uploads: setStatusForId(uploadId, 'Done') }),
+      model: modifyFields(model, { uploads: setStatusForId(uploadId, 'Done') }),
     }),
 
     CompletedCancelUploadFile: ({ uploadId, outcome }) =>
       Command.Interruptible.Outcome.match<UpdateReturn>(outcome, {
         Interrupted: () => ({
-          model: evo(model, {
+          model: modifyFields(model, {
             uploads: setStatusForId(uploadId, 'Cancelled'),
           }),
         }),
@@ -194,19 +199,19 @@ export const update = (model: Model, message: Message) =>
 // VIEW
 
 const badgeClass = (status: UploadStatus): string =>
-  M.value(status).pipe(
-    M.when('Uploading', () => 'bg-blue-100 text-blue-700'),
-    M.when('Done', () => 'bg-green-100 text-green-700'),
-    M.when('Cancelled', () => 'bg-gray-200 text-gray-600'),
-    M.exhaustive,
+  Match.value(status).pipe(
+    Match.when('Uploading', () => 'bg-blue-100 text-blue-700'),
+    Match.when('Done', () => 'bg-green-100 text-green-700'),
+    Match.when('Cancelled', () => 'bg-gray-200 text-gray-600'),
+    Match.exhaustive,
   )
 
 const ACTION_BUTTON_CLASS =
   'px-3 py-1 text-sm font-medium rounded-md border transition'
 
 const uploadActionView = (upload: Upload, h: HtmlBuilder<Message>): Html =>
-  M.value(upload.status).pipe(
-    M.when('Uploading', () =>
+  Match.value(upload.status).pipe(
+    Match.when('Uploading', () =>
       h.keyed('button')(
         'Uploading',
         [
@@ -222,7 +227,7 @@ const uploadActionView = (upload: Upload, h: HtmlBuilder<Message>): Html =>
         ['Cancel'],
       ),
     ),
-    M.when('Cancelled', () =>
+    Match.when('Cancelled', () =>
       h.keyed('button')(
         'Cancelled',
         [
@@ -238,8 +243,8 @@ const uploadActionView = (upload: Upload, h: HtmlBuilder<Message>): Html =>
         ['Restart'],
       ),
     ),
-    M.when('Done', () => h.empty),
-    M.exhaustive,
+    Match.when('Done', () => h.empty),
+    Match.exhaustive,
   )
 
 const uploadView = (upload: Upload, h: HtmlBuilder<Message>): Html =>

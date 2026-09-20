@@ -1,16 +1,16 @@
-import { Boolean, Effect, Option, Schema as S } from 'effect'
+import { Boolean, Effect, Option, Schema } from 'effect'
 
 import type { Html, HtmlBuilder } from '../../html/index.js'
 import * as ManagedResource from '../../managedResource/index.js'
 import { defineMessageUnion } from '../../message/index.js'
-import { evo } from '../../struct/index.js'
+import { modifyFields } from '../../struct/index.js'
 import type * as Update from '../../update/index.js'
 
 // MODEL
 
-export const Model = S.Struct({
-  isFeedOpen: S.Boolean,
-  status: S.Literals(['Disconnected', 'Connected', 'Failed']),
+export const Model = Schema.Struct({
+  isFeedOpen: Schema.Boolean,
+  status: Schema.Literals(['Disconnected', 'Connected', 'Failed']),
 })
 export type Model = typeof Model.Type
 
@@ -18,9 +18,9 @@ export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
   ClickedToggleFeed: {},
-  AcquiredFeedSocket: { socketId: S.String },
+  AcquiredFeedSocket: { socketId: Schema.String },
   ReleasedFeedSocket: {},
-  FailedAcquireFeedSocket: { error: S.String },
+  FailedAcquireFeedSocket: { error: Schema.String },
 })
 
 export type Message = typeof Message.Type
@@ -34,7 +34,7 @@ const FeedSocketResource = ManagedResource.tag<FeedSocket>()('FeedSocket')
 const PresenceResource = ManagedResource.tag<string>()('Presence')
 
 export const feedResources = ManagedResource.make<Model, Message>()(entry => ({
-  feedSocket: entry(S.Option(S.Struct({ channel: S.String })), {
+  feedSocket: entry(Schema.Option(Schema.Struct({ channel: Schema.String })), {
     resource: FeedSocketResource,
     modelToMaybeRequirements: model =>
       model.isFeedOpen ? Option.some({ channel: 'general' }) : Option.none(),
@@ -46,7 +46,7 @@ export const feedResources = ManagedResource.make<Model, Message>()(entry => ({
     onAcquireError: error =>
       Message.FailedAcquireFeedSocket({ error: String(error) }),
   }),
-  presence: entry(S.Option(S.Null), {
+  presence: entry(Schema.Option(Schema.Null), {
     resource: PresenceResource,
     modelToMaybeRequirements: model =>
       model.isFeedOpen ? Option.some(null) : Option.none(),
@@ -71,16 +71,16 @@ export const initialModel = Model.make({
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedToggleFeed: () => ({
-      model: evo(model, { isFeedOpen: Boolean.not }),
+      model: modifyFields(model, { isFeedOpen: Boolean.not }),
     }),
     AcquiredFeedSocket: () => ({
-      model: evo(model, { status: () => 'Connected' }),
+      model: modifyFields(model, { status: () => 'Connected' }),
     }),
     ReleasedFeedSocket: () => ({
-      model: evo(model, { status: () => 'Disconnected' }),
+      model: modifyFields(model, { status: () => 'Disconnected' }),
     }),
     FailedAcquireFeedSocket: () => ({
-      model: evo(model, { status: () => 'Failed' }),
+      model: modifyFields(model, { status: () => 'Failed' }),
     }),
   })
 

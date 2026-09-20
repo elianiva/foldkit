@@ -1,7 +1,7 @@
-import { Effect, Match as M, Option, Schema as S } from 'effect'
+import { Effect, Match, Option, Schema } from 'effect'
 import { Command, Update, Url } from 'foldkit'
 import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import * as Shared from '@typing-game/shared'
 
@@ -13,14 +13,14 @@ import { urlToAppRoute } from './route'
 import { RoomsClient } from './rpc'
 
 const NavigateInternal = Command.define('NavigateInternal', {
-  args: { url: S.String },
+  args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
   execute: ({ url }) =>
     pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 })
 
 const LoadExternal = Command.define('LoadExternal', {
-  args: { href: S.String },
+  args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
   execute: ({ href }) =>
     load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
@@ -31,7 +31,7 @@ export type UpdateReturn<Model, Message> = Update.Return<
   Message,
   RoomsClient
 >
-const withUpdateReturn = M.withReturnType<UpdateReturn<Model, Message>>()
+const withUpdateReturn = Match.withReturnType<UpdateReturn<Model, Message>>()
 
 type UpdateStep = Update.Step<Model, Message, RoomsClient>
 
@@ -39,7 +39,7 @@ const readHome = (model: Model): Option.Option<Home.Model.Model> =>
   Option.some(model.home)
 
 const writeHome = (model: Model, nextHome: Home.Model.Model): Model =>
-  evo(model, { home: () => nextHome })
+  modifyFields(model, { home: () => nextHome })
 
 const toGotHomeMessage = (message: Home.Message): Message =>
   Message.GotHomeMessage({ message })
@@ -48,7 +48,7 @@ const readRoom = (model: Model): Option.Option<Room.Model.Model> =>
   Option.some(model.room)
 
 const writeRoom = (model: Model, nextRoom: Room.Model.Model): Model =>
-  evo(model, { room: () => nextRoom })
+  modifyFields(model, { room: () => nextRoom })
 
 const toGotRoomMessage = (message: Room.Message): Message =>
   Message.GotRoomMessage({ message })
@@ -107,7 +107,7 @@ export const update = (model: Model, message: Message) =>
       }),
 
     ChangedUrl: ({ url }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         route: () => urlToAppRoute(url),
       }),
     }),
@@ -115,10 +115,12 @@ export const update = (model: Model, message: Message) =>
     GotHomeMessage: ({ message }) => foldHomeMessage(model, message),
 
     GotRoomMessage: ({ message }) =>
-      M.value(model.route).pipe(
+      Match.value(model.route).pipe(
         withUpdateReturn,
-        M.tag('Room', ({ roomId }) => foldRoomMessage(roomId)(model, message)),
-        M.orElse(() => ({ model })),
+        Match.tag('Room', ({ roomId }) =>
+          foldRoomMessage(roomId)(model, message),
+        ),
+        Match.orElse(() => ({ model })),
       ),
     CompletedNavigateInternal: () => ({ model }),
     CompletedLoadExternal: () => ({ model }),

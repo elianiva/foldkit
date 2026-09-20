@@ -1,15 +1,15 @@
-import { Effect, Number, Option, Schema as S } from 'effect'
+import { Effect, Number, Option, Schema } from 'effect'
 
 import * as Command from '../../command/index.js'
 import type { Html, HtmlBuilder } from '../../html/index.js'
 import { defineMessageUnion } from '../../message/index.js'
-import { evo } from '../../struct/index.js'
+import { modifyFields } from '../../struct/index.js'
 import type * as Update from '../../update/index.js'
 
 // MODEL
 
-export const Model = S.Struct({
-  commits: S.Number,
+export const Model = Schema.Struct({
+  commits: Schema.Number,
 })
 export type Model = typeof Model.Type
 
@@ -37,9 +37,11 @@ export const initialModel: Model = { commits: 0 }
 
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
-    Committed: () => ({ model: evo(model, { commits: Number.increment }) }),
+    Committed: () => ({
+      model: modifyFields(model, { commits: Number.increment }),
+    }),
     Reset: () => ({
-      model: evo(model, { commits: () => 0 }),
+      model: modifyFields(model, { commits: () => 0 }),
       commands: [RecordReset()],
     }),
     CompletedRecordReset: () => ({ model }),

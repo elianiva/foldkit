@@ -5,7 +5,7 @@ import {
   Exit,
   Fiber,
   Layer,
-  Schema as S,
+  Schema,
   Stream,
 } from 'effect'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,18 +15,20 @@ import { __htmlBuilder } from '../html/index.js'
 import { defineMessageUnion } from '../message/index.js'
 import * as Subscription from '../subscription/subscription.js'
 import type * as Update from '../update/index.js'
-import { makeApplication, makeElement, run } from './runtime.js'
+import { makeApplication } from './makeApplication.js'
+import { makeElement } from './makeElement.js'
+import { run } from './start.js'
 
 const Message = defineMessageUnion({
   ClickedReadValue: {},
-  SucceededReadValue: { value: S.String },
+  SucceededReadValue: { value: Schema.String },
 })
 type Message = typeof Message.Type
 
-const Model = S.Struct({ label: S.String })
+const Model = Schema.Struct({ label: Schema.String })
 type Model = typeof Model.Type
 
-const Flags = S.Struct({ initialLabel: S.String })
+const Flags = Schema.Struct({ initialLabel: Schema.String })
 type Flags = typeof Flags.Type
 
 type ResourceShape = Readonly<{ value: string }>
@@ -314,7 +316,7 @@ describe('resources', () => {
     expect(releaseCount).toBe(1)
   })
 
-  it('leaves the Layer unbuilt when an HMR restore skips init', async () => {
+  it('leaves the Layer unbuilt when a preserved Model skips init', async () => {
     let buildCount = 0
 
     const CountedResourceLive = Layer.effect(
@@ -347,7 +349,7 @@ describe('resources', () => {
     }
   })
 
-  it('does not run the flags Effect when an HMR restore skips init', async () => {
+  it('does not run the flags Effect when a preserved Model skips init', async () => {
     let flagsRunCount = 0
 
     const element = makeElement({
@@ -374,7 +376,7 @@ describe('resources', () => {
     }
   })
 
-  it('builds the Layer when an unreadable HMR Model falls back to init', async () => {
+  it('builds the Layer when an unreadable preserved Model falls back to init', async () => {
     let buildCount = 0
 
     const CountedResourceLive = Layer.effect(

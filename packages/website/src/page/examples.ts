@@ -5,15 +5,14 @@ import { Link } from '../link'
 import { pageTitle, para } from '../prose'
 import {
   exampleDetailRouter,
-  gettingStartedRouter,
+  getStartedRouter,
   typingTerminalRouter,
 } from '../route'
 import { type ExampleMeta, examples as exampleMetas } from './example/meta'
 
 export const exampleAppCount = exampleMetas.length + 1
 
-const nameClassName =
-  'text-accent-600 dark:text-accent-500 underline decoration-accent-600/30 dark:decoration-accent-500/30 hover:decoration-accent-600 dark:hover:decoration-accent-500 font-medium'
+const nameClassName = 'link-accent font-medium'
 
 const exampleRow = (example: ExampleMeta): Html =>
   ih.tr(
@@ -63,9 +62,7 @@ const typingTerminalRow = (): Html =>
           ih.a(
             [
               ih.Href(Link.typingTerminal),
-              ih.Class(
-                'text-accent-600 dark:text-accent-500 underline decoration-accent-600/30 dark:decoration-accent-500/30 hover:decoration-accent-600 dark:hover:decoration-accent-500 mt-1 inline-block',
-              ),
+              ih.Class('link-accent mt-1 inline-block'),
             ],
             ['Race your friends →'],
           ),
@@ -113,23 +110,13 @@ export const view = (): Html =>
       para(
         'Each example is available as a starter template via ',
         ih.a(
-          [
-            ih.Href(Link.createFoldkitApp),
-            ih.Class(
-              'text-accent-600 dark:text-accent-500 underline decoration-accent-600/30 dark:decoration-accent-500/30 hover:decoration-accent-600 dark:hover:decoration-accent-500',
-            ),
-          ],
+          [ih.Href(Link.createFoldkitApp), ih.Class('link-accent')],
           ['Create Foldkit App'],
         ),
         '. Pick one that matches what you’re building, or start with Counter and work your way up. See ',
         ih.a(
-          [
-            ih.Href(gettingStartedRouter()),
-            ih.Class(
-              'text-accent-600 dark:text-accent-500 underline decoration-accent-600/30 dark:decoration-accent-500/30 hover:decoration-accent-600 dark:hover:decoration-accent-500',
-            ),
-          ],
-          ['Getting Started'],
+          [ih.Href(getStartedRouter()), ih.Class('link-accent')],
+          ['Get Started'],
         ),
         ' to get up and running.',
       ),

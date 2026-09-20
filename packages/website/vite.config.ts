@@ -1,4 +1,4 @@
-import { Array, Match as M, Option, Schema as S, pipe } from 'effect'
+import { Array, Match, Option, Schema, pipe } from 'effect'
 import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { basename, extname, join, relative, resolve } from 'node:path'
@@ -12,22 +12,22 @@ import tailwindcss from '@tailwindcss/vite'
 import {
   counterDemoCodePlugin,
   notePlayerDemoCodePlugin,
-} from './scripts/demoCodePlugin'
-import { monacoWorkersPlugin } from './scripts/monacoWorkersPlugin'
-import { playgroundFilesPlugin } from './scripts/playgroundFilesPlugin'
-import { playgroundTypesPlugin } from './scripts/playgroundTypesPlugin'
-import { islandAttributes } from './src/markdown/islandAttributes'
+} from './scripts/demoCodePlugin.ts'
+import { monacoWorkersPlugin } from './scripts/monacoWorkersPlugin.ts'
+import { playgroundFilesPlugin } from './scripts/playgroundFilesPlugin.ts'
+import { playgroundTypesPlugin } from './scripts/playgroundTypesPlugin.ts'
+import { islandAttributes } from './src/markdown/islandAttributes.ts'
 import {
   ParsedApiReference,
   collectNamedSchemas,
   moduleNameToSlug,
   parseTypedocJson,
-} from './src/page/apiReference/domain'
+} from './src/page/apiReference/domain.ts'
 import {
   type NamedSchemas,
   typeDefFromChildren,
   typeToString,
-} from './src/page/apiReference/typeToString'
+} from './src/page/apiReference/typeToString.ts'
 import {
   Kind,
   type TypeDocCommentPart,
@@ -36,10 +36,10 @@ import {
   type TypeDocParam,
   type TypeDocSignature,
   type TypeDocTypeParam,
-} from './src/page/apiReference/typedoc'
-import { PostFrontmatter } from './src/page/blog/frontmatter'
-import { exampleSlugs } from './src/page/example/meta'
-import { shikiDarkTheme, shikiLightTheme } from './src/shikiTheme'
+} from './src/page/apiReference/typedoc.ts'
+import { PostFrontmatter } from './src/page/blog/frontmatter.ts'
+import { exampleSlugs } from './src/page/example/meta.ts'
+import { shikiDarkTheme, shikiLightTheme } from './src/shikiTheme.ts'
 
 const shikiThemes = {
   light: shikiLightTheme,
@@ -77,28 +77,11 @@ const highlightCodePlugin = (): Plugin => ({
     const rawCode = await readFile(filePath, 'utf-8')
     const code = rawCode.trimEnd()
 
-    const lines = code.split('\n')
-    const lineCount = lines.length
-    const lineDigits = String(lineCount).length
-
     const lang = highlightLanguage(filePath)
 
-    const html = await codeToHtml(code, {
-      lang,
-      themes: shikiThemes,
-      decorations: lines.map((line, i) => ({
-        start: { line: i, character: 0 },
-        end: { line: i, character: line.length },
-        properties: { 'data-line': i + 1 },
-      })),
-    })
+    const html = await codeToHtml(code, { lang, themes: shikiThemes })
 
-    const htmlWithDigits = html.replace(
-      '<pre ',
-      `<pre data-line-digits="${lineDigits}" `,
-    )
-
-    return `export default ${JSON.stringify(htmlWithDigits)}`
+    return `export default ${JSON.stringify(html)}`
   },
 })
 
@@ -120,7 +103,7 @@ const RESOLVED_CSS_SNIPPETS_ID = '\0' + CSS_SNIPPETS_ID
  * invisible until restart while every `.ts` snippet hot-updates.
  */
 const cssSnippetsPlugin = (): Plugin => {
-  const snippetDirectory = resolve(__dirname, 'src/snippet')
+  const snippetDirectory = resolve(import.meta.dirname, 'src/snippet')
   const isCssSnippet = (filePath: string): boolean =>
     filePath.startsWith(snippetDirectory) && filePath.endsWith('.css')
 
@@ -143,22 +126,11 @@ const cssSnippetsPlugin = (): Plugin => {
           const filePath = join(snippetDirectory, fileName)
           this.addWatchFile(filePath)
           const raw = (await readFile(filePath, 'utf-8')).trimEnd()
-          const lines = raw.split('\n')
 
-          const html = await codeToHtml(raw, {
+          const highlighted = await codeToHtml(raw, {
             lang: 'css',
             themes: shikiThemes,
-            decorations: lines.map((line, index) => ({
-              start: { line: index, character: 0 },
-              end: { line: index, character: line.length },
-              properties: { 'data-line': index + 1 },
-            })),
           })
-
-          const highlighted = html.replace(
-            '<pre ',
-            `<pre data-line-digits="${String(lines.length).length}" `,
-          )
 
           return [fileName.replace(/\.css$/, ''), { raw, highlighted }] as const
         }),
@@ -202,7 +174,7 @@ const RESOLVED_PARSED_API_ID = '\0' + PARSED_API_ID
 // reference renders `Calendar` alongside `Ui/Calendar`. Type references render by name,
 // so the two projects' independent numeric ids never collide.
 const loadApiTypeDocJson = async (): Promise<TypeDocJson> => {
-  const generatedDir = resolve(__dirname, 'src/generated')
+  const generatedDir = resolve(import.meta.dirname, 'src/generated')
   const [coreRaw, uiRaw] = await Promise.all([
     readFile(join(generatedDir, 'api.json'), 'utf-8'),
     readFile(join(generatedDir, 'api-ui.json'), 'utf-8'),
@@ -213,7 +185,7 @@ const loadApiTypeDocJson = async (): Promise<TypeDocJson> => {
     ...core,
     children: [...(core.children ?? []), ...(ui.children ?? [])],
   }
-  return S.decodeUnknownSync(TypeDocJson)(merged)
+  return Schema.decodeUnknownSync(TypeDocJson)(merged)
 }
 
 const formatTypeParam =
@@ -426,12 +398,12 @@ const itemToEntries = (namedSchemas: NamedSchemas) => {
     prefix: string,
     item: TypeDocItem,
   ): ReadonlyArray<readonly [string, string]> =>
-    M.value(item.kind).pipe(
-      M.when(Kind.Function, () => fnEntries(prefix, item)),
-      M.when(Kind.TypeAlias, () => typeEntries(prefix, item)),
-      M.when(Kind.Interface, () => ifaceEntries(prefix, item)),
-      M.when(Kind.Variable, () => varEntries(prefix, item)),
-      M.orElse(() => []),
+    Match.value(item.kind).pipe(
+      Match.when(Kind.Function, () => fnEntries(prefix, item)),
+      Match.when(Kind.TypeAlias, () => typeEntries(prefix, item)),
+      Match.when(Kind.Interface, () => ifaceEntries(prefix, item)),
+      Match.when(Kind.Variable, () => varEntries(prefix, item)),
+      Match.orElse(() => []),
     )
 }
 
@@ -573,7 +545,7 @@ const parsedApiPlugin = (): Plugin => ({
 
     const json = await loadApiTypeDocJson()
     const parsed = parseTypedocJson(json)
-    const encoded = S.encodeSync(ParsedApiReference)(parsed)
+    const encoded = Schema.encodeSync(ParsedApiReference)(parsed)
 
     return `export default ${JSON.stringify(encoded)}`
   },
@@ -606,7 +578,10 @@ const landingDataPlugin = (): Plugin => ({
     }
 
     const packageJson = JSON.parse(
-      await readFile(resolve(__dirname, '../foldkit/package.json'), 'utf-8'),
+      await readFile(
+        resolve(import.meta.dirname, '../foldkit/package.json'),
+        'utf-8',
+      ),
     )
 
     const githubStarCount = readBakedStarCount()
@@ -747,29 +722,13 @@ const highlightExampleFile = async (
 ) => {
   const rawCode = await readFile(filePath, 'utf-8')
   const code = rawCode.trimEnd()
-  const lines = code.split('\n')
-  const lineCount = lines.length
-  const lineDigits = String(lineCount).length
   const lang = langFromExtension(filePath)
 
-  const html = await codeToHtml(code, {
-    lang,
-    themes: shikiThemes,
-    decorations: lines.map((line, i) => ({
-      start: { line: i, character: 0 },
-      end: { line: i, character: line.length },
-      properties: { 'data-line': i + 1 },
-    })),
-  })
-
-  const htmlWithDigits = html.replace(
-    '<pre ',
-    `<pre data-line-digits="${lineDigits}" `,
-  )
+  const html = await codeToHtml(code, { lang, themes: shikiThemes })
 
   return {
     path: relative(baseDirectory, filePath),
-    highlightedHtml: htmlWithDigits,
+    highlightedHtml: html,
     rawCode: code,
   }
 }
@@ -793,7 +752,10 @@ const highlightExampleSourcesPlugin = (): Plugin => ({
       return undefined
     }
 
-    const exampleDirectory = resolve(__dirname, `../../examples/${slug}`)
+    const exampleDirectory = resolve(
+      import.meta.dirname,
+      `../../examples/${slug}`,
+    )
     const collected = await Promise.all(
       EXAMPLE_SOURCE_ROOTS.map(root =>
         collectSourceFiles(join(exampleDirectory, root)),

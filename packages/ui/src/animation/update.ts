@@ -1,9 +1,9 @@
-import { Effect, Match as M, Schema as S } from 'effect'
+import { Effect, Match, Schema } from 'effect'
 import { type Update } from 'foldkit'
 import * as Command from 'foldkit/command'
 import * as Dom from 'foldkit/dom'
 import * as Render from 'foldkit/render'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { idSelector } from '../internal/selectors.js'
 import {
@@ -19,7 +19,7 @@ import {
 const elementSelector = (id: string): string => idSelector(id)
 
 type UpdateReturn = Update.ReturnWithOutMessage<Model, Message, OutMessage>
-const withUpdateReturn = M.withReturnType<UpdateReturn>()
+const withUpdateReturn = Match.withReturnType<UpdateReturn>()
 
 /** Waits for paint via double-rAF before the enter/leave lifecycle advances. */
 export const WaitForPaint = Command.define('WaitForPaint', {
@@ -30,7 +30,7 @@ export const WaitForPaint = Command.define('WaitForPaint', {
 export const WaitForAnimationSettled = Command.define(
   'WaitForAnimationSettled',
   {
-    args: { id: S.String },
+    args: { id: Schema.String },
     messages: [Message.EndedAnimation],
     execute: ({ id }) =>
       Dom.waitForAnimationSettled(elementSelector(id)).pipe(
@@ -58,7 +58,7 @@ export function update(model: Model, message: Message): UpdateReturn {
       }
 
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           isShowing: () => true,
           transitionState: () => 'EnterStart',
         }),
@@ -76,7 +76,7 @@ export function update(model: Model, message: Message): UpdateReturn {
       }
 
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           isShowing: () => false,
           transitionState: () => 'LeaveStart',
         }),
@@ -85,32 +85,53 @@ export function update(model: Model, message: Message): UpdateReturn {
     },
 
     CompletedWaitForPaint: () =>
-      M.value(model.transitionState).pipe(
+      Match.value(model.transitionState).pipe(
         withUpdateReturn,
-        M.when('EnterStart', () => ({
-          model: evo(model, { transitionState: () => 'EnterAnimating' }),
+        Match.when('EnterStart', () => ({
+          model: modifyFields(model, {
+            transitionState: () => 'EnterAnimating',
+          }),
           commands: [WaitForAnimationSettled({ id: model.id })],
         })),
-        M.when('LeaveStart', () => ({
-          model: evo(model, { transitionState: () => 'LeaveAnimating' }),
+        Match.when('LeaveStart', () => ({
+          model: modifyFields(model, {
+            transitionState: () => 'LeaveAnimating',
+          }),
           outMessage: OutMessage.StartedLeaveAnimating(),
         })),
-        M.orElse(() => ({ model })),
+        Match.orElse(() => ({ model })),
       ),
 
     EndedAnimation: () =>
-      M.value(model.transitionState).pipe(
+      Match.value(model.transitionState).pipe(
         withUpdateReturn,
-        M.when('EnterAnimating', () => ({
-          model: evo(model, { transitionState: () => 'Idle' }),
+        Match.when('EnterAnimating', () => ({
+          model: modifyFields(model, { transitionState: () => 'Idle' }),
         })),
-        M.when('LeaveAnimating', () => ({
-          model: evo(model, { transitionState: () => 'Idle' }),
+        Match.when('LeaveAnimating', () => ({
+          model: modifyFields(model, { transitionState: () => 'Idle' }),
           outMessage: OutMessage.TransitionedOut(),
         })),
-        M.orElse(() => ({ model })),
+        Match.orElse(() => ({ model })),
       ),
   })
+}
+
+/** Programmatically starts the enter lifecycle. */
+export const show = (model: Model): Update.Return<Model, Message> =>
+  update(model, Message.Showed())
+
+/** Programmatically starts the leave lifecycle. */
+export const hide = (model: Model): Update.Return<Model, Message> =>
+  update(model, Message.Hid())
+
+/** Toggles the animation between its shown and hidden states. */
+export const toggle = (model: Model): Update.Return<Model, Message> => {
+  if (model.isShowing) {
+    return hide(model)
+  } else {
+    return show(model)
+  }
 }
 
 /** Creates the standard leave-phase command that waits for CSS animations on the element to settle. Use this when handling the `StartedLeaveAnimating` OutMessage for components that don't need custom leave behavior. */

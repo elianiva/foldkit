@@ -20,7 +20,8 @@ A markdown file will be created in `.changeset/` - commit this with your PR.
 
 ## Version Guidelines
 
-- **patch**: Bug fixes, documentation updates, internal refactors
+- **empty**: Internal changes with no user-facing effect, such as refactors and test-only changes. Create one with `pnpm changeset add --empty`; it satisfies `changeset status` without adding a changelog entry
+- **patch**: Bug fixes, documentation updates, metadata changes
 - **minor**: New features and public breaking changes while Foldkit is pre-1.0
 - **major**: Reserved for the eventual 1.0 release and post-1.0 breaking changes
 
@@ -32,6 +33,8 @@ When changesets are merged to main, a "Version Packages" pull request is automat
 2. Updates CHANGELOG.md files
 3. Uploads and verifies the stable package set without moving `latest`
 4. Comments on the merged Version Packages pull request when that exact commit is ready to promote
+
+Write changesets for package-specific changes. When shared build inputs change, the release planner automatically adds patch bumps for every website package. Existing larger bumps take precedence.
 
 After the notification arrives, confirm that `npm whoami` and `gh auth status` both succeed. Check out the commit named in the notification with a clean working tree, install its dependencies, and run:
 

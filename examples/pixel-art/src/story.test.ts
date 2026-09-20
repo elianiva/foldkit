@@ -1,9 +1,9 @@
 import { Equal, Option } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
+import { modifyFields } from 'foldkit/struct'
 import { describe, expect, test } from 'vitest'
 
 import { Dialog, Listbox, RadioGroup } from '@foldkit/ui'
-import { Message as DialogMessage } from '@foldkit/ui/dialog'
 
 import { ExportPng, SaveCanvas } from './command'
 import { createEmptyGrid } from './grid'
@@ -254,10 +254,9 @@ describe('fill tool', () => {
     const gridWithBarrier = createEmptyGrid(4).map(row =>
       row.map((cell, x) => (x === 2 ? Option.some<PaletteIndex>(1) : cell)),
     )
-    const modelWithBarrier = {
-      ...emptyModel,
-      grid: gridWithBarrier,
-    }
+    const modelWithBarrier = modifyFields(emptyModel, {
+      grid: () => gridWithBarrier,
+    })
 
     story(
       update,
@@ -291,20 +290,20 @@ describe('grid size', () => {
   })
 
   test('painted canvas opens confirmation dialog', () => {
-    const paintedModel: Model = {
-      ...emptyModel,
-      grid: createEmptyGrid(4).map((row, y) =>
-        row.map((cell, x) =>
-          x === 0 && y === 0 ? Option.some<PaletteIndex>(0) : cell,
+    const paintedModel: Model = modifyFields(emptyModel, {
+      grid: () =>
+        createEmptyGrid(4).map((row, y) =>
+          row.map((cell, x) =>
+            x === 0 && y === 0 ? Option.some<PaletteIndex>(0) : cell,
+          ),
         ),
-      ),
-    }
+    })
 
     story(
       update,
       given(paintedModel),
       message(Message.SelectedGridSize({ size: 8 })),
-      Command.resolve(Dialog.ShowDialog, DialogMessage.SucceededShowDialog()),
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
       model(model => {
         expect(model.maybePendingGridSize).toEqual(Option.some(8))
         expect(model.gridSizeConfirmDialog.isOpen).toBe(true)
@@ -314,21 +313,23 @@ describe('grid size', () => {
   })
 
   test('confirming grid size change resets canvas and history', () => {
-    const modelWithPending: Model = {
-      ...emptyModel,
-      maybePendingGridSize: Option.some(8),
-      gridSizeConfirmDialog: Dialog.init({
-        id: 'grid-size-confirm-dialog',
-        isOpen: true,
-      }),
-      undoStack: [createEmptyGrid(4)],
-    }
+    const modelWithPending: Model = modifyFields(emptyModel, {
+      maybePendingGridSize: () => Option.some(8),
+      gridSizeConfirmDialog: () =>
+        Dialog.boot({
+          id: 'grid-size-confirm-dialog',
+        }).model,
+      undoStack: () => [createEmptyGrid(4)],
+    })
 
     story(
       update,
       given(modelWithPending),
       message(Message.ConfirmedGridSizeChange()),
-      Command.resolve(Dialog.CloseDialog, DialogMessage.CompletedCloseDialog()),
+      Command.resolve(
+        Dialog.CloseDialog,
+        Dialog.Message.CompletedCloseDialog(),
+      ),
       Command.resolve(SaveCanvas, Message.CompletedSaveCanvas()),
       model(model => {
         expect(model.gridSize).toBe(8)
@@ -449,7 +450,7 @@ describe('export failure', () => {
       message(
         Message.FailedExportPng({ error: 'Canvas 2D context not available' }),
       ),
-      Command.resolve(Dialog.ShowDialog, DialogMessage.SucceededShowDialog()),
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
       model(model => {
         expect(model.maybeExportError).toEqual(
           Option.some('Canvas 2D context not available'),
@@ -466,13 +467,16 @@ describe('export failure', () => {
       message(
         Message.FailedExportPng({ error: 'Canvas 2D context not available' }),
       ),
-      Command.resolve(Dialog.ShowDialog, DialogMessage.SucceededShowDialog()),
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
       message(
         Message.GotErrorDialogMessage({
-          message: DialogMessage.RequestedClose(),
+          message: Dialog.Message.RequestedClose(),
         }),
       ),
-      Command.resolve(Dialog.CloseDialog, DialogMessage.CompletedCloseDialog()),
+      Command.resolve(
+        Dialog.CloseDialog,
+        Dialog.Message.CompletedCloseDialog(),
+      ),
       model(model => {
         expect(model.maybeExportError).toEqual(Option.none())
         expect(model.errorDialog.isOpen).toBe(false)

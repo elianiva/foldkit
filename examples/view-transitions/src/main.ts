@@ -1,10 +1,10 @@
-import { Array, Effect, Option, Schema as S, String } from 'effect'
+import { Array, Effect, Option, Schema, String } from 'effect'
 import { Command, Runtime, type Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
 import { Transition } from 'foldkit/route'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { Url, toString as urlToString } from 'foldkit/url'
 
 import { Artwork, artworks, findArtwork } from './artwork'
@@ -14,9 +14,9 @@ export { AppRoute } from './route'
 
 // MODEL
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   route: AppRoute,
-  filterText: S.String,
+  filterText: Schema.String,
 })
 export type Model = typeof Model.Type
 
@@ -27,7 +27,7 @@ export const Message = defineMessageUnion({
   CompletedLoadExternal: {},
   ClickedLink: { request: UrlRequest },
   ChangedUrl: { url: Url },
-  UpdatedFilterText: { filterText: S.String },
+  UpdatedFilterText: { filterText: Schema.String },
 })
 
 export type Message = typeof Message.Type
@@ -41,14 +41,14 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = (
 // COMMAND
 
 const NavigateInternal = Command.define('NavigateInternal', {
-  args: { url: S.String },
+  args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
   execute: ({ url }) =>
     pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 })
 
 const LoadExternal = Command.define('LoadExternal', {
-  args: { href: S.String },
+  args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
   execute: ({ href }) =>
     load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
@@ -76,11 +76,11 @@ export const update = (model: Model, message: Message) =>
       }),
 
     ChangedUrl: ({ url }) => ({
-      model: evo(model, { route: () => urlToAppRoute(url) }),
+      model: modifyFields(model, { route: () => urlToAppRoute(url) }),
     }),
 
     UpdatedFilterText: ({ filterText }) => ({
-      model: evo(model, { filterText: () => filterText }),
+      model: modifyFields(model, { filterText: () => filterText }),
     }),
   })
 

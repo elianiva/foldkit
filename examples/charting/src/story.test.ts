@@ -1,8 +1,8 @@
 import { Command, given, message, model, story } from 'foldkit/story'
+import { modifyFields } from 'foldkit/struct'
 import { expect, test } from 'vitest'
 
 import { RadioGroup } from '@foldkit/ui'
-import { Message as RadioGroupMessage } from '@foldkit/ui/radioGroup'
 
 import { FetchTelemetry, SyncChart } from './command'
 import {
@@ -11,14 +11,14 @@ import {
   chartModes,
   packageIds,
 } from './domain'
-import { loadingModel, readyModel, sampleTelemetry } from './main.fixtures'
+import { loadingModel, readyModel, sampleTelemetry } from './main.fixture'
 import { Message } from './message'
 import { TelemetryAsyncData } from './model'
 import { update } from './update'
 
 const selectedChartMode = (chartMode: ChartMode) =>
   Message.GotChartModeRadioGroupMessage({
-    message: RadioGroupMessage.SelectedOption({
+    message: RadioGroup.Message.SelectedOption({
       index: chartModes.indexOf(chartMode),
       value: chartMode,
     }),
@@ -26,7 +26,7 @@ const selectedChartMode = (chartMode: ChartMode) =>
 
 const selectedPackage = (packageId: PackageId) =>
   Message.GotPackageRadioGroupMessage({
-    message: RadioGroupMessage.SelectedOption({
+    message: RadioGroup.Message.SelectedOption({
       index: packageIds.indexOf(packageId),
       value: packageId,
     }),
@@ -34,7 +34,7 @@ const selectedPackage = (packageId: PackageId) =>
 
 const resolveChartModeFocus = Command.resolve(
   RadioGroup.FocusOption,
-  RadioGroupMessage.CompletedFocusOption(),
+  RadioGroup.Message.CompletedFocusOption(),
 )
 
 test('mounting the chart syncs current telemetry into ECharts', () => {
@@ -102,10 +102,12 @@ test('refreshing with data keeps the old dashboard while fetching', () => {
 test('a failed refresh preserves stale data in the stale state', () => {
   story(
     update,
-    given({
-      ...readyModel,
-      telemetry: TelemetryAsyncData.Refreshing({ data: sampleTelemetry }),
-    }),
+    given(
+      modifyFields(readyModel, {
+        telemetry: () =>
+          TelemetryAsyncData.Refreshing({ data: sampleTelemetry }),
+      }),
+    ),
     message(Message.FailedFetchTelemetry({ error: 'rate limited' })),
     model(model => {
       expect(model.telemetry._tag).toBe('Stale')

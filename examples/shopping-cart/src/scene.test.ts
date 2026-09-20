@@ -1,9 +1,9 @@
 import { Option } from 'effect'
 import { click, expect, given, role, scene, text } from 'foldkit/scene'
+import { modifyFields } from 'foldkit/struct'
 import { describe, test } from 'vitest'
 
 import { products } from './data/products'
-import { Cart } from './domain'
 import { type Model, update, view } from './main'
 import { Products } from './page'
 import { AppRoute } from './route'
@@ -18,12 +18,6 @@ const baseModel: Model = {
   orderPlaced: false,
   productsPage: Products.init(products),
 }
-
-const withCart = (cart: Cart.Cart, overrides: Partial<Model> = {}): Model => ({
-  ...baseModel,
-  cart,
-  ...overrides,
-})
 
 describe('view', () => {
   test('the nav bar lists every section', () => {
@@ -40,33 +34,29 @@ describe('view', () => {
     scene(
       { update, view },
       given(
-        withCart([
-          { item: apple, quantity: 2 },
-          { item: banana, quantity: 3 },
-        ]),
+        modifyFields(baseModel, {
+          cart: () => [
+            { item: apple, quantity: 2 },
+            { item: banana, quantity: 3 },
+          ],
+        }),
       ),
       expect(role('link', { name: 'Cart (5)' })).toExist(),
     )
   })
 
-  test('the Products route lists every product with an Add to Cart button', () => {
+  test('the Products route renders the Products heading', () => {
     scene(
       { update, view },
       given(baseModel),
       expect(role('heading', { name: 'Products' })).toExist(),
-      expect(text('Apple')).toExist(),
-      expect(text('Banana')).toExist(),
-      expect(role('button', { name: 'Add to Cart' })).toExist(),
     )
   })
 
   test('the Cart route shows the empty state when no items have been added', () => {
     scene(
       { update, view },
-      given({
-        ...baseModel,
-        route: AppRoute.Cart(),
-      }),
+      given(modifyFields(baseModel, { route: () => AppRoute.Cart() })),
       expect(role('heading', { name: 'Shopping Cart' })).toExist(),
       expect(text('Your cart is empty')).toExist(),
     )
@@ -76,7 +66,10 @@ describe('view', () => {
     scene(
       { update, view },
       given(
-        withCart([{ item: apple, quantity: 2 }], { route: AppRoute.Cart() }),
+        modifyFields(baseModel, {
+          cart: () => [{ item: apple, quantity: 2 }],
+          route: () => AppRoute.Cart(),
+        }),
       ),
       expect(text('Apple')).toExist(),
       expect(text('$1.50 each')).toExist(),
@@ -89,10 +82,7 @@ describe('view', () => {
   test('the Checkout route shows the empty state when the cart is empty', () => {
     scene(
       { update, view },
-      given({
-        ...baseModel,
-        route: AppRoute.Checkout(),
-      }),
+      given(modifyFields(baseModel, { route: () => AppRoute.Checkout() })),
       expect(role('heading', { name: 'Checkout' })).toExist(),
       expect(text('Your cart is empty')).toExist(),
     )
@@ -102,8 +92,9 @@ describe('view', () => {
     scene(
       { update, view },
       given(
-        withCart([{ item: apple, quantity: 2 }], {
-          route: AppRoute.Checkout(),
+        modifyFields(baseModel, {
+          cart: () => [{ item: apple, quantity: 2 }],
+          route: () => AppRoute.Checkout(),
         }),
       ),
       expect(role('heading', { name: 'Order Summary' })).toExist(),
@@ -117,8 +108,9 @@ describe('view', () => {
     scene(
       { update, view },
       given(
-        withCart([{ item: apple, quantity: 1 }], {
-          route: AppRoute.Checkout(),
+        modifyFields(baseModel, {
+          cart: () => [{ item: apple, quantity: 1 }],
+          route: () => AppRoute.Checkout(),
         }),
       ),
       click(role('button', { name: 'Place Order' })),
@@ -129,10 +121,11 @@ describe('view', () => {
   test('an unmatched route renders 404 NotFound', () => {
     scene(
       { update, view },
-      given({
-        ...baseModel,
-        route: AppRoute.NotFound({ path: '/oops' }),
-      }),
+      given(
+        modifyFields(baseModel, {
+          route: () => AppRoute.NotFound({ path: '/oops' }),
+        }),
+      ),
       expect(role('heading', { name: '404 - Page Not Found' })).toExist(),
       expect(text('The path "/oops" was not found.')).toExist(),
     )

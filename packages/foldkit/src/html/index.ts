@@ -6,8 +6,9 @@ import {
   Fiber,
   Function,
   Option,
+  Predicate,
   Record,
-  Schema as S,
+  Schema,
   Stream,
 } from 'effect'
 
@@ -25,7 +26,17 @@ import {
 } from '../domReflection.js'
 import type { File } from '../file/index.js'
 import type { MountAction } from '../mount/index.js'
-import { MountTracker } from '../mount/index.js'
+import {
+  MountRuntime,
+  MountTracker,
+  liveViewStateChanges,
+} from '../mount/index.js'
+import {
+  attachOnUnmount,
+  beginReplayUnmountRender,
+  endReplayUnmountRender,
+  flushReplayUnmountsAfterPatchFailure,
+} from '../onUnmountModule.js'
 import {
   hasTrustedInnerHtml,
   isClientOnlyProperty,
@@ -52,10 +63,13 @@ import {
 } from './dragZoneTracking.js'
 import {
   type DispatchSync,
+  type MountDispatchResolver,
+  type MountRenderOwner,
   type UnmountResolver,
   clearRuntime,
   requireBoundaryMappers,
   requireDispatch,
+  requireMountDispatchResolver,
   requireRuntimeContext,
   requireUnmountResolver,
   setRuntime,
@@ -148,6 +162,34 @@ const keyboardModifiers = (event: KeyboardEvent): KeyboardModifiers => ({
   metaKey: event.metaKey,
 })
 
+const inputEventValue = (target: EventTarget | null): string => {
+  if (
+    Predicate.hasProperty(target, 'value') &&
+    Predicate.isString(target.value)
+  ) {
+    return target.value
+  }
+
+  if (
+    Predicate.hasProperty(target, 'innerText') &&
+    Predicate.isString(target.innerText)
+  ) {
+    return target.innerText
+  }
+
+  if (
+    Predicate.hasProperty(target, 'textContent') &&
+    Predicate.isString(target.textContent)
+  ) {
+    return target.textContent
+  }
+
+  return ''
+}
+
+const isEventTargetCurrentTarget = (event: Event): boolean =>
+  event.target === event.currentTarget
+
 const isDevToolsFocusTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.id === DEVTOOLS_HOST_ID
 
@@ -157,21 +199,21 @@ const isFocusInsideCurrentTarget = (event: FocusEvent): boolean =>
   event.currentTarget.contains(event.relatedTarget)
 
 /** A virtual DOM element. Constructed synchronously by the element factories
- *  returned from {@link html}. The runtime patches a `VNode` (or `null` to
+ *  on {@link HtmlBuilder}. The runtime patches a `VNode` (or `null` to
  *  render nothing) into the application container. */
 export type Html = VNode | null
 export type Child = Html | string
 
 /** Whether an event handler leaves the browser's default action in place or
  *  prevents it synchronously. */
-export const DefaultAction = S.Literals(['Allow', 'Prevent'])
+export const DefaultAction = Schema.Literals(['Allow', 'Prevent'])
 /** Whether an event handler leaves the browser's default action in place or
  *  prevents it synchronously. */
 export type DefaultAction = typeof DefaultAction.Type
 
 /** Whether an event continues through its DOM propagation path or stops after
  *  the handlers on its current element have run. */
-export const EventPropagation = S.Literals(['Bubble', 'Stop'])
+export const EventPropagation = Schema.Literals(['Bubble', 'Stop'])
 /** Whether an event continues through its DOM propagation path or stops after
  *  the handlers on its current element have run. */
 export type EventPropagation = typeof EventPropagation.Type
@@ -179,10 +221,10 @@ export type EventPropagation = typeof EventPropagation.Type
 /** Declarative controls for an `OnClick` handler. Omitted
  *  fields keep the browser default, allow the click to bubble, and leave focus
  *  unchanged. */
-export const ClickOptions = S.Struct({
-  defaultAction: S.optional(DefaultAction),
-  propagation: S.optional(EventPropagation),
-  focusSelector: S.optional(S.String),
+export const ClickOptions = Schema.Struct({
+  defaultAction: Schema.optional(DefaultAction),
+  propagation: Schema.optional(EventPropagation),
+  focusSelector: Schema.optional(Schema.String),
 })
 /** Declarative controls for an `OnClick` handler. Omitted
  *  fields keep the browser default, allow the click to bubble, and leave focus
@@ -191,7 +233,7 @@ export type ClickOptions = typeof ClickOptions.Type
 
 /** Text direction for the document root, applied to `dir` on the `<html>`
  *  element. `Auto` defers to the browser's first-strong-character heuristic. */
-export const TextDirection = S.Literals(['Ltr', 'Rtl', 'Auto'])
+export const TextDirection = Schema.Literals(['Ltr', 'Rtl', 'Auto'])
 /** Text direction for the document root, applied to `dir` on the `<html>`
  *  element. `Auto` defers to the browser's first-strong-character heuristic. */
 export type TextDirection = typeof TextDirection.Type
@@ -212,25 +254,33 @@ export const textDirectionToAttribute = (
   direction: TextDirection,
 ): 'ltr' | 'rtl' | 'auto' => textDirectionAttributes[direction]
 
-/** A view's complete output for the runtime: title, body, and optional document
- *  metadata. The runtime applies `title` to `document.title`, syncs `lang` and
- *  `dir` to the `<html>` element, syncs `canonical` to `<link rel="canonical">`
- *  (creating it if absent), syncs `ogUrl` to `<meta property="og:url">`
- *  (creating it if absent), and patches `body` into the application container.
+/** The complete output of a page-owning view. The runtime patches `body` into
+ *  the application container, writes `title` to `document.title`, and manages
+ *  the optional document metadata.
  *
- *  When `canonical` is omitted, it defaults to the current URL (origin +
- *  pathname + search). When `ogUrl` is omitted, it falls back to `canonical`.
+ *  Supplied `lang` and `dir` values are written to the `<html>` element. An
+ *  omitted value leaves the current attribute unchanged, including a value
+ *  from the served HTML or an earlier render. Drive both fields from the Model
+ *  when the application can switch languages at runtime.
  *
- *  `lang` and `dir` have no default. When either is omitted the runtime does not
- *  touch that attribute, leaving whatever value it currently holds, so a view
- *  that never sets it leaves the served HTML in place. Drive them from the Model
- *  when the app switches language at runtime. The served HTML still decides what
- *  a crawler sees on first paint, because the runtime can only sync after the
- *  first render.
+ *  `canonical` has no address-bar default. Derive it from the typed route in
+ *  the Model, where the application can decide which route and query values
+ *  identify the page. If the view never supplies it, the runtime leaves a
+ *  served `<link rel="canonical">` unchanged or keeps the document without one.
  *
- *  This is the return type of a `makeApplication` view, which owns the document. An
- *  app embedded at a node should use `makeElement` instead, whose view returns
- *  `Html` and never touches the `<head>` or the `<html>` element. */
+ *  Before the client first writes `canonical` or `ogUrl`, it records the value
+ *  already present on the corresponding element. A later omission restores
+ *  that value, or removes the element if the runtime created it. During
+ *  hydration, the recorded value may be metadata rendered for the initial
+ *  route. `ogUrl` can be supplied independently; when omitted alongside an
+ *  explicit `canonical`, it uses that canonical.
+ *
+ *  Server rendering returns only the canonical supplied by the view. It
+ *  returns `ogUrl` when supplied or falls back to an explicit canonical.
+ *
+ *  This is the return type of a `makeApplication` view. An application embedded
+ *  at a node should use `makeElement`; its view returns `Html` and never changes
+ *  the `<head>` or `<html>` element. */
 export type Document = Readonly<{
   title: string
   lang?: string
@@ -456,8 +506,16 @@ export type TagName =
   | 'munderover'
   | 'semantics'
 
+type OnMountLifecycle = {
+  isActive: boolean
+  isStarted: boolean
+}
+
 type OnMountState = {
   fiber: Fiber.Fiber<void>
+  lifecycle: OnMountLifecycle
+  notifyEnded: () => void
+  owner: MountRenderOwner
 }
 
 const onMountStates = new WeakMap<Element, OnMountState>()
@@ -468,23 +526,25 @@ const onMountStates = new WeakMap<Element, OnMountState>()
 // its own. Mount Effects get this for free because the replayed tree is built
 // with `noOpDispatch`, but the `OnUnmount` destroy hook fires against the prior
 // live tree, so the runtime opens this window during a replay render and
-// `OnUnmount` reads it to skip dispatching a hygiene Message into live history.
-let isReplayRenderActive = false
+// the OnUnmount VDOM module defers dispatching a hygiene Message into live
+// history. A successful replay discards those callbacks. Patch-failure recovery
+// flushes them because it destroys and later rebuilds the imperative live tree.
 
 /** Opens a replay-render window. The runtime calls this immediately before a
  *  DevTools time-travel render and closes it with {@link __endReplayRender}
- *  afterward, so any `OnUnmount` destroy hook that fires while the replayed
- *  tree is patched in skips its dispatch. Without the gate the hook would
+ *  afterward, so the `OnUnmount` module can defer live callbacks while the
+ *  replayed tree is patched in. Without the gate the callback would
  *  enqueue a hygiene Message into live history during mere inspection of past
  *  state. */
-export const __beginReplayRender = (): void => {
-  isReplayRenderActive = true
-}
+export const __beginReplayRender = beginReplayUnmountRender
 
 /** Closes the replay-render window opened by {@link __beginReplayRender}. */
-export const __endReplayRender = (): void => {
-  isReplayRenderActive = false
-}
+export const __endReplayRender = endReplayUnmountRender
+
+/** Dispatches the live `OnUnmount` callbacks deferred by a replay patch that
+ *  failed and forced the runtime to discard the damaged DOM. */
+export const __flushReplayUnmountsAfterPatchFailure =
+  flushReplayUnmountsAfterPatchFailure
 
 /** Key under which the OnMount attribute stamps a `{ name }` marker on the
  *  snabbdom `VNodeData`. Snabbdom passes unknown data fields through without
@@ -497,8 +557,9 @@ export const FOLDKIT_MOUNT_KEY = 'foldkitMount' as const
  *  introspection can identify pending mounts. When the mount lives inside a
  *  Submodel boundary, it also carries that boundary's `toParentMessage` chain
  *  (innermost first), snapshotted at render time, so `Scene.Mount.resolve` can
- *  replay the lift the result travels through in production. The chain is read
- *  only by the Scene harness; production dispatch lifts via `ctx.dispatch`. */
+ *  replay the lift the result travels through in production. Production keeps
+ *  the Mount bound to the dispatcher owned by its acquiring render, then
+ *  resolves that owner's latest chain when the Mount emits. */
 export type FoldkitMountMarker = Readonly<{
   name: string
   args?: Record<string, unknown>
@@ -559,6 +620,8 @@ export type Attribute<Message> = Data.TaggedEnum<{
       timeStamp: number,
       clientX: number,
       clientY: number,
+      pointerId: number,
+      target: EventTarget | null,
     ) => Option.Option<Message>
   }
   OnPointerUp: {
@@ -573,6 +636,15 @@ export type Attribute<Message> = Data.TaggedEnum<{
     readonly f: (key: string, modifiers: KeyboardModifiers) => Message
   }
   OnKeyDownPreventDefault: {
+    readonly f: (
+      key: string,
+      modifiers: KeyboardModifiers,
+    ) => Option.Option<Message>
+  }
+  OnKeyDownSelf: {
+    readonly f: (key: string, modifiers: KeyboardModifiers) => Message
+  }
+  OnKeyDownSelfPreventDefault: {
     readonly f: (
       key: string,
       modifiers: KeyboardModifiers,
@@ -602,6 +674,15 @@ export type Attribute<Message> = Data.TaggedEnum<{
   OnFocusLeave: { readonly message: Message }
   OnInput: { readonly f: (value: string) => Message }
   OnChange: { readonly f: (value: string) => Message }
+  OnBeforeInput: {
+    readonly f: (inputType: string, data: Option.Option<string>) => Message
+  }
+  OnBeforeInputPreventDefault: {
+    readonly f: (
+      inputType: string,
+      data: Option.Option<string>,
+    ) => Option.Option<Message>
+  }
   OnFileChange: {
     readonly f: (files: ReadonlyArray<File>) => Message
   }
@@ -618,6 +699,9 @@ export type Attribute<Message> = Data.TaggedEnum<{
   OnCopyText: { readonly text: string }
   OnCutText: { readonly text: string; readonly message: Message }
   OnCancel: { readonly message: Message }
+  OnCancelPreventDefault: {
+    readonly maybeCustomEventMessage: Option.Option<Message>
+  }
   OnToggle: { readonly f: (isOpen: boolean) => Message }
   OnContextMenu: { readonly message: Message }
   OnDragStart: { readonly message: Message }
@@ -876,7 +960,7 @@ export type Attribute<Message> = Data.TaggedEnum<{
   Prop: { readonly key: string; readonly value: unknown }
   OnCustomEvent: {
     readonly name: string
-    readonly f: (event: CustomEvent<any>) => Message
+    readonly f: (event: CustomEvent<unknown>) => Option.Option<Message>
   }
   OnMount: {
     readonly action: MountAction<Message, any>
@@ -922,6 +1006,8 @@ const {
   OnPointerUp,
   OnKeyDown,
   OnKeyDownPreventDefault,
+  OnKeyDownSelf,
+  OnKeyDownSelfPreventDefault,
   OnKeyDownFocus,
   OnKeyUp,
   OnKeyUpPreventDefault,
@@ -932,6 +1018,8 @@ const {
   OnFocusLeave,
   OnInput,
   OnChange,
+  OnBeforeInput,
+  OnBeforeInputPreventDefault,
   OnFileChange,
   OnSubmit,
   OnReset,
@@ -944,6 +1032,7 @@ const {
   OnCopyText,
   OnCutText,
   OnCancel,
+  OnCancelPreventDefault,
   OnToggle,
   OnContextMenu,
   OnDragStart,
@@ -1205,16 +1294,17 @@ const {
 
 export { Prop, OnCustomEvent }
 
-// BUILD CONTEXT: per-VNode bag of mutable VNode data plus the dispatcher this
-// VNode's events route through. Allocated once per unique dispatcher in
-// `buildVNodeData`, typically once total (a second time when ChildAttribute
-// items route through a child Submodel's own dispatch).
+// BUILD CONTEXT: per-VNode bag of mutable VNode data plus the dispatchers this
+// VNode's events and Mount results route through. Allocated once per unique
+// dispatcher in `buildVNodeData`, typically once total (a second time when
+// ChildAttribute items route through a child Submodel's own dispatch).
 type BuildContext = Readonly<{
   data: VNodeData
   getPostpatchProps: () => Array<Readonly<{ propName: string; value: unknown }>>
   dispatch: DispatchSync
   resolveUnmount: UnmountResolver
   boundaryMappers: ReadonlyArray<(message: unknown) => unknown>
+  resolveMountDispatch?: MountDispatchResolver
   getCapturedContext: () => Context.Context<never>
 }>
 
@@ -1354,7 +1444,8 @@ const updateDataOn = (ctx: BuildContext, on: On): void => {
   for (const key of Object.keys(on)) {
     /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
     const existingHandler = (existing as Record<string, unknown>)[key] as
-      ((...args: ReadonlyArray<unknown>) => void) | undefined
+      | ((...args: ReadonlyArray<unknown>) => void)
+      | undefined
     /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
     const newHandler = (on as Record<string, unknown>)[key] as (
       ...args: ReadonlyArray<unknown>
@@ -1627,6 +1718,8 @@ const attributeHandlers: AttributeHandlers = {
           event.timeStamp,
           event.clientX,
           event.clientY,
+          event.pointerId,
+          event.target,
         )
         if (Option.isSome(maybeMessage)) {
           ctx.dispatch(maybeMessage.value)
@@ -1655,6 +1748,28 @@ const attributeHandlers: AttributeHandlers = {
   OnKeyDownPreventDefault: ({ f: toMaybeMessage }, ctx: BuildContext) =>
     updateDataOn(ctx, {
       keydown: (event: KeyboardEvent) => {
+        const maybeMessage = toMaybeMessage(event.key, keyboardModifiers(event))
+        if (Option.isSome(maybeMessage)) {
+          event.preventDefault()
+          ctx.dispatch(maybeMessage.value)
+        }
+      },
+    }),
+  OnKeyDownSelf: ({ f: toMessage }, ctx: BuildContext) =>
+    updateDataOn(ctx, {
+      keydown: (event: KeyboardEvent) => {
+        if (isEventTargetCurrentTarget(event)) {
+          ctx.dispatch(toMessage(event.key, keyboardModifiers(event)))
+        }
+      },
+    }),
+  OnKeyDownSelfPreventDefault: ({ f: toMaybeMessage }, ctx: BuildContext) =>
+    updateDataOn(ctx, {
+      keydown: (event: KeyboardEvent) => {
+        if (!isEventTargetCurrentTarget(event)) {
+          return
+        }
+
         const maybeMessage = toMaybeMessage(event.key, keyboardModifiers(event))
         if (Option.isSome(maybeMessage)) {
           event.preventDefault()
@@ -1730,14 +1845,36 @@ const attributeHandlers: AttributeHandlers = {
   OnInput: ({ f: toMessage }, ctx: BuildContext) =>
     updateDataOn(ctx, {
       input: (event: Event) =>
-        /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
-        ctx.dispatch(toMessage((event.target as HTMLInputElement).value)),
+        ctx.dispatch(toMessage(inputEventValue(event.target))),
     }),
   OnChange: ({ f: toMessage }, ctx: BuildContext) =>
     updateDataOn(ctx, {
       change: (event: Event) =>
-        /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
-        ctx.dispatch(toMessage((event.target as HTMLInputElement).value)),
+        ctx.dispatch(toMessage(inputEventValue(event.target))),
+    }),
+  OnBeforeInput: ({ f: toMessage }, ctx: BuildContext) =>
+    updateDataOn(ctx, {
+      beforeinput: (event: InputEvent) =>
+        ctx.dispatch(
+          toMessage(event.inputType, Option.fromNullishOr(event.data)),
+        ),
+    }),
+  OnBeforeInputPreventDefault: ({ f: toMaybeMessage }, ctx: BuildContext) =>
+    updateDataOn(ctx, {
+      beforeinput: (event: InputEvent) => {
+        if (!event.cancelable) {
+          return
+        }
+
+        const maybeMessage = toMaybeMessage(
+          event.inputType,
+          Option.fromNullishOr(event.data),
+        )
+        if (Option.isSome(maybeMessage)) {
+          event.preventDefault()
+          ctx.dispatch(maybeMessage.value)
+        }
+      },
     }),
   OnFileChange: ({ f: toMessage }, ctx: BuildContext) =>
     updateDataOn(ctx, {
@@ -1809,6 +1946,18 @@ const attributeHandlers: AttributeHandlers = {
       cancel: (event: Event) => {
         event.preventDefault()
         ctx.dispatch(message)
+      },
+    }),
+  OnCancelPreventDefault: ({ maybeCustomEventMessage }, ctx: BuildContext) =>
+    updateDataOn(ctx, {
+      cancel: (event: Event) => {
+        event.preventDefault()
+        if (
+          event instanceof CustomEvent &&
+          Option.isSome(maybeCustomEventMessage)
+        ) {
+          ctx.dispatch(maybeCustomEventMessage.value)
+        }
       },
     }),
   OnToggle: ({ f: toMessage }, ctx: BuildContext) =>
@@ -2324,17 +2473,24 @@ const attributeHandlers: AttributeHandlers = {
     setDataAttr(ctx, 'preserveAspectRatio', value),
   Prop: ({ key, value }, ctx: BuildContext) =>
     setClientOnlyDataProp(ctx, key, value),
-  OnCustomEvent: ({ name, f: toMessage }, ctx: BuildContext) =>
+  OnCustomEvent: ({ name, f: toMaybeMessage }, ctx: BuildContext) =>
     updateDataOn(ctx, {
       [name]: (event: Event) => {
         if (event instanceof CustomEvent) {
-          ctx.dispatch(toMessage(event))
+          const maybeMessage = toMaybeMessage(event)
+
+          if (Option.isSome(maybeMessage)) {
+            ctx.dispatch(maybeMessage.value)
+          }
         }
       },
     }),
   OnMount: ({ action }, ctx: BuildContext) => {
     const capturedContext = ctx.getCapturedContext()
     const maybeTracker = Context.getOption(capturedContext, MountTracker)
+    const maybeMountRuntime = Context.getOption(capturedContext, MountRuntime)
+    const resolveMountDispatch =
+      ctx.resolveMountDispatch ?? currentMountDispatchResolverOrFallback()
     const notifyStarted = Option.isSome(maybeTracker)
       ? () => maybeTracker.value.started(action.name, action.args)
       : Function.constVoid
@@ -2357,22 +2513,19 @@ const attributeHandlers: AttributeHandlers = {
       insert: vnode => {
         if (vnode.elm instanceof Element) {
           const element = vnode.elm
-          notifyStarted()
-          const fiber = Effect.runForkWith(capturedContext)(
-            Stream.runForEach(action.f(element), message =>
-              Effect.sync(() => ctx.dispatch(message)),
-            ).pipe(
-              Effect.catchCause(cause =>
-                Effect.sync(() => {
-                  console.error(
-                    `[OnMount ${action.name}] unhandled failure`,
-                    cause,
-                  )
-                }),
-              ),
-            ),
-          )
-          onMountStates.set(element, { fiber })
+          acquireMount(element)
+        }
+      },
+      postpatch: (_previousVNode, vnode) => {
+        if (vnode.elm instanceof Element) {
+          const state = onMountStates.get(vnode.elm)
+          if (
+            state?.owner === 'Replay' &&
+            resolveMountDispatch.owner === 'Live'
+          ) {
+            releaseMount(state)
+            acquireMount(vnode.elm, state.fiber)
+          }
         }
       },
       destroy: vnode => {
@@ -2382,12 +2535,63 @@ const attributeHandlers: AttributeHandlers = {
         if (vnode.elm instanceof Element) {
           const state = onMountStates.get(vnode.elm)
           if (state) {
+            releaseMount(state)
             Effect.runFork(Fiber.interrupt(state.fiber))
             onMountStates.delete(vnode.elm)
-            notifyEnded()
           }
         }
       },
+    }
+
+    function releaseMount(state: OnMountState): void {
+      state.lifecycle.isActive = false
+      if (state.lifecycle.isStarted) {
+        state.lifecycle.isStarted = false
+        if (state.owner === 'Live') {
+          state.notifyEnded()
+        }
+      }
+    }
+
+    function acquireMount(
+      element: Element,
+      previousFiber?: Fiber.Fiber<void>,
+    ): void {
+      const lifecycle: OnMountLifecycle = {
+        isActive: true,
+        isStarted: true,
+      }
+      const mountDispatch = resolveMountDispatch.resolve()
+      const viewStateChanges = Option.match(maybeMountRuntime, {
+        onNone: () => liveViewStateChanges,
+        onSome: mountRuntime => mountRuntime.captureViewStateChanges(),
+      })
+      notifyStarted()
+      const runMount = Effect.suspend(() => {
+        if (!lifecycle.isActive) {
+          return Effect.void
+        }
+        return Stream.runForEach(action.f(element, viewStateChanges), message =>
+          Effect.sync(() => mountDispatch(message)),
+        )
+      }).pipe(
+        Effect.catchCause(cause =>
+          Effect.sync(() => {
+            console.error(`[OnMount ${action.name}] unhandled failure`, cause)
+          }),
+        ),
+      )
+      const acquire =
+        previousFiber === undefined
+          ? runMount
+          : Fiber.interrupt(previousFiber).pipe(Effect.andThen(runMount))
+      const fiber = Effect.runForkWith(capturedContext)(acquire)
+      onMountStates.set(element, {
+        fiber,
+        lifecycle,
+        notifyEnded,
+        owner: resolveMountDispatch.owner,
+      })
     }
   },
   OnUnmount: ({ message }, ctx: BuildContext) => {
@@ -2397,18 +2601,7 @@ const attributeHandlers: AttributeHandlers = {
     // deregistered the wrap, so a fire-time lookup would throw; the
     // precomputed thunk sidesteps that teardown race.
     const dispatchUnmount = ctx.resolveUnmount(message)
-    const existingDestroy = ctx.data.hook?.destroy
-    ctx.data.hook = {
-      ...ctx.data.hook,
-      destroy: vnode => {
-        if (existingDestroy !== undefined) {
-          existingDestroy(vnode)
-        }
-        if (!isReplayRenderActive) {
-          dispatchUnmount()
-        }
-      },
-    }
+    attachOnUnmount(ctx.data, dispatchUnmount)
   },
 }
 
@@ -2469,6 +2662,14 @@ const currentUnmountResolverOrFallback = (): UnmountResolver => {
   }
 }
 
+const currentMountDispatchResolverOrFallback = (): MountDispatchResolver => {
+  try {
+    return requireMountDispatchResolver()
+  } catch {
+    return { owner: 'Live', resolve: () => fallbackDispatch }
+  }
+}
+
 const capturedContextOrEmpty = (): Context.Context<never> => {
   try {
     return requireRuntimeContext()
@@ -2514,14 +2715,16 @@ const attachPostpatchHook = (
   postpatchProps: ReadonlyArray<Readonly<{ propName: string; value: unknown }>>,
 ): void => {
   const existingInsert = data.hook?.insert
+  const existingPostpatch = data.hook?.postpatch
   data.hook = {
     ...data.hook,
     insert: vnode => {
       applyControlledProps(vnode, postpatchProps)
       existingInsert?.(vnode)
     },
-    postpatch: (_oldVnode, vnode) => {
+    postpatch: (oldVnode, vnode) => {
       applyControlledProps(vnode, postpatchProps)
+      existingPostpatch?.(oldVnode, vnode)
     },
   }
 }
@@ -2566,7 +2769,8 @@ const buildVNodeData = <Message>(
   let mainCtx: BuildContext | undefined
   let boundaryCtxByDispatch: Map<DispatchSync, BuildContext> | undefined
   let sharedPostpatchProps:
-    Array<Readonly<{ propName: string; value: unknown }>> | undefined
+    | Array<Readonly<{ propName: string; value: unknown }>>
+    | undefined
   const getSharedPostpatchProps = (): Array<
     Readonly<{ propName: string; value: unknown }>
   > => (sharedPostpatchProps ??= [])
@@ -2575,13 +2779,20 @@ const buildVNodeData = <Message>(
     if (isChildAttribute(item)) {
       boundaryCtxByDispatch ??= new Map()
       let ctx = boundaryCtxByDispatch.get(item.dispatch)
-      if (ctx === undefined) {
+      if (
+        ctx === undefined ||
+        (item.resolveMountDispatch !== undefined &&
+          ctx.resolveMountDispatch !== item.resolveMountDispatch)
+      ) {
         ctx = {
           data,
           getPostpatchProps: getSharedPostpatchProps,
           dispatch: item.dispatch,
           resolveUnmount: item.resolveUnmount,
           boundaryMappers: item.boundaryMappers,
+          ...(item.resolveMountDispatch !== undefined && {
+            resolveMountDispatch: item.resolveMountDispatch,
+          }),
           getCapturedContext: capturedContextOrEmpty,
         }
         boundaryCtxByDispatch.set(item.dispatch, ctx)
@@ -2691,6 +2902,13 @@ const assertSingleContentOwner = (
   const innerHtmlOwner = hasTrustedInnerHtml(properties)
     ? 'h.InnerHTML'
     : 'a client-only innerHTML property'
+  if (lowerTagName === 'textarea') {
+    throw new Error(
+      `[foldkit] <textarea> was given ${innerHtmlOwner}. Textarea content ` +
+        'must use h.Value because innerHTML stops updating the live value ' +
+        'after the browser marks the field dirty. Remove the innerHTML owner.',
+    )
+  }
   if (children.length > 0) {
     throw new Error(
       `[foldkit] <${lowerTagName}> was given both ${innerHtmlOwner} and children. ` +
@@ -3015,7 +3233,7 @@ const voidElement =
     createElement(tagName, attributes, [])
 
 const keyed =
-  <Message>() =>
+  <Message>(): KeyedFunction<Message> =>
   (tagName: TagName) =>
   (
     key: PropertyKey,
@@ -3035,6 +3253,35 @@ type ElementFunction<Message> = (
 type VoidElementFunction<Message> = (
   attributes: ReadonlyArray<Attribute<Message> | ChildAttribute>,
 ) => Html
+
+/** An attribute accepted by textarea builders. Textarea content must use
+ *  `h.Value`; innerHTML does not keep the live value tracking the Model after
+ *  the field is dirty. */
+export type TextareaAttribute<Message> = Exclude<
+  Attribute<Message>,
+  Readonly<{ _tag: 'InnerHTML' }>
+>
+
+type TextValueElementFunction<Message> = (
+  attributes: ReadonlyArray<TextareaAttribute<Message> | ChildAttribute>,
+) => Html
+
+type KeyedElementFunction<Message> = (
+  key: PropertyKey,
+  attributes?: ReadonlyArray<Attribute<Message> | ChildAttribute>,
+  children?: ReadonlyArray<Child>,
+) => Html
+
+type KeyedTextValueElementFunction<Message> = (
+  key: PropertyKey,
+  attributes?: ReadonlyArray<TextareaAttribute<Message> | ChildAttribute>,
+) => Html
+
+type KeyedFunction<Message> = <Name extends TagName>(
+  tagName: Name,
+) => Name extends 'textarea'
+  ? KeyedTextValueElementFunction<Message>
+  : KeyedElementFunction<Message>
 
 type HtmlElements<Message> = {
   a: ElementFunction<Message>
@@ -3137,7 +3384,7 @@ type HtmlElements<Message> = {
   tbody: ElementFunction<Message>
   td: ElementFunction<Message>
   template: ElementFunction<Message>
-  textarea: ElementFunction<Message>
+  textarea: TextValueElementFunction<Message>
   tfoot: ElementFunction<Message>
   th: ElementFunction<Message>
   thead: ElementFunction<Message>
@@ -3608,6 +3855,9 @@ type HtmlAttributes<Message> = {
     readonly _tag: 'OnPointerLeave'
     readonly f: (pointerType: string) => Option.Option<Message>
   }
+  /** Dispatches an optional Message on pointerdown. The final callback
+   *  arguments identify the pointer and its originating target, so a parent
+   *  gesture handler can distinguish touches and ignore nested controls. */
   OnPointerDown: (
     toMaybeMessage: (
       pointerType: string,
@@ -3617,6 +3867,8 @@ type HtmlAttributes<Message> = {
       timeStamp: number,
       clientX: number,
       clientY: number,
+      pointerId: number,
+      target: EventTarget | null,
     ) => Option.Option<Message>,
   ) => {
     readonly _tag: 'OnPointerDown'
@@ -3628,6 +3880,8 @@ type HtmlAttributes<Message> = {
       timeStamp: number,
       clientX: number,
       clientY: number,
+      pointerId: number,
+      target: EventTarget | null,
     ) => Option.Option<Message>
   }
   OnPointerUp: (
@@ -3671,6 +3925,24 @@ type HtmlAttributes<Message> = {
     ) => Option.Option<Message>,
   ) => {
     readonly _tag: 'OnKeyDownPreventDefault'
+    readonly f: (
+      key: string,
+      modifiers: KeyboardModifiers,
+    ) => Option.Option<Message>
+  }
+  OnKeyDownSelf: (
+    toMessage: (key: string, modifiers: KeyboardModifiers) => Message,
+  ) => {
+    readonly _tag: 'OnKeyDownSelf'
+    readonly f: (key: string, modifiers: KeyboardModifiers) => Message
+  }
+  OnKeyDownSelfPreventDefault: (
+    toMaybeMessage: (
+      key: string,
+      modifiers: KeyboardModifiers,
+    ) => Option.Option<Message>,
+  ) => {
+    readonly _tag: 'OnKeyDownSelfPreventDefault'
     readonly f: (
       key: string,
       modifiers: KeyboardModifiers,
@@ -3741,6 +4013,24 @@ type HtmlAttributes<Message> = {
     readonly _tag: 'OnChange'
     readonly f: (value: string) => Message
   }
+  OnBeforeInput: (
+    toMessage: (inputType: string, data: Option.Option<string>) => Message,
+  ) => {
+    readonly _tag: 'OnBeforeInput'
+    readonly f: (inputType: string, data: Option.Option<string>) => Message
+  }
+  OnBeforeInputPreventDefault: (
+    toMaybeMessage: (
+      inputType: string,
+      data: Option.Option<string>,
+    ) => Option.Option<Message>,
+  ) => {
+    readonly _tag: 'OnBeforeInputPreventDefault'
+    readonly f: (
+      inputType: string,
+      data: Option.Option<string>,
+    ) => Option.Option<Message>
+  }
   OnFileChange: (toMessage: (files: ReadonlyArray<File>) => Message) => {
     readonly _tag: 'OnFileChange'
     readonly f: (files: ReadonlyArray<File>) => Message
@@ -3794,6 +4084,14 @@ type HtmlAttributes<Message> = {
   OnCancel: (message: Message) => {
     readonly _tag: 'OnCancel'
     readonly message: Message
+  }
+  /** Prevents the default action of a `cancel` event. When a
+   *  `customEventMessage` is provided, dispatches it only for a `CustomEvent`,
+   *  allowing a synthetic cancel signal to be distinguished from the native
+   *  event. Native `cancel` events never dispatch a Message. */
+  OnCancelPreventDefault: (customEventMessage?: Message) => {
+    readonly _tag: 'OnCancelPreventDefault'
+    readonly maybeCustomEventMessage: Option.Option<Message>
   }
   OnToggle: (toMessage: (isOpen: boolean) => Message) => {
     readonly _tag: 'OnToggle'
@@ -4684,6 +4982,8 @@ const htmlAttributes = <Message>(): HtmlAttributes<Message> => ({
       timeStamp: number,
       clientX: number,
       clientY: number,
+      pointerId: number,
+      target: EventTarget | null,
     ) => Option.Option<Message>,
   ) => OnPointerDown({ f: toMaybeMessage }),
   OnPointerUp: (
@@ -4703,6 +5003,42 @@ const htmlAttributes = <Message>(): HtmlAttributes<Message> => ({
       modifiers: KeyboardModifiers,
     ) => Option.Option<Message>,
   ) => OnKeyDownPreventDefault({ f: toMaybeMessage }),
+  /**
+   * Like `OnKeyDown`, but dispatches only when the keydown targets this
+   * element itself rather than bubbling from a descendant.
+   *
+   * Use this on a composite widget that owns keyboard input for its host but
+   * contains interactive children whose keydowns should remain independent.
+   *
+   * @example
+   * ```typescript
+   * h.OnKeyDownSelf((key, modifiers) => Message.PressedHostKey({ key }))
+   * ```
+   */
+  OnKeyDownSelf: (
+    toMessage: (key: string, modifiers: KeyboardModifiers) => Message,
+  ) => OnKeyDownSelf({ f: toMessage }),
+  /**
+   * Like `OnKeyDownPreventDefault`, but handles only keydowns that target this
+   * element itself rather than bubbling from a descendant. Returning `Some`
+   * prevents the browser's default action and dispatches the Message;
+   * returning `None` leaves the key to the browser.
+   *
+   * @example
+   * ```typescript
+   * h.OnKeyDownSelfPreventDefault(key =>
+   *   key === 'Enter'
+   *     ? Option.some(Message.SubmittedEditor())
+   *     : Option.none(),
+   * )
+   * ```
+   */
+  OnKeyDownSelfPreventDefault: (
+    toMaybeMessage: (
+      key: string,
+      modifiers: KeyboardModifiers,
+    ) => Option.Option<Message>,
+  ) => OnKeyDownSelfPreventDefault({ f: toMaybeMessage }),
   /**
    * Keydown handler that, for a handled key, synchronously focuses the element
    * matching `focusSelector` and dispatches `message`, both inside the
@@ -4747,9 +5083,49 @@ const htmlAttributes = <Message>(): HtmlAttributes<Message> => ({
   OnBlur: (message: Message) => OnBlur({ message }),
   OnFocusEnter: (message: Message) => OnFocusEnter({ message }),
   OnFocusLeave: (message: Message) => OnFocusLeave({ message }),
+  /**
+   * Dispatches the target's textual value on every `input` event. Form
+   * controls report their `value`; a `Contenteditable` host reports its
+   * rendered text.
+   */
   OnInput: (toMessage: (value: string) => Message) => OnInput({ f: toMessage }),
+  /**
+   * Dispatches the target's textual value on every `change` event, using the
+   * same form-control and `Contenteditable` value semantics as `OnInput`.
+   */
   OnChange: (toMessage: (value: string) => Message) =>
     OnChange({ f: toMessage }),
+  /**
+   * Observes `beforeinput` events. The translator receives the edit's
+   * `inputType` and its `data` as an `Option`; edits such as deletion usually
+   * carry no text and therefore provide `None`.
+   */
+  OnBeforeInput: (
+    toMessage: (inputType: string, data: Option.Option<string>) => Message,
+  ) => OnBeforeInput({ f: toMessage }),
+  /**
+   * Handles cancelable `beforeinput` events before the browser mutates the
+   * DOM. Returning `Some` prevents the native edit and dispatches the Message;
+   * returning `None` lets the edit proceed.
+   *
+   * A non-cancelable edit, including some IME composition input, proceeds
+   * without dispatching. Use `OnInput` to reconcile the resulting content.
+   *
+   * @example
+   * ```typescript
+   * h.OnBeforeInputPreventDefault((inputType, data) =>
+   *   inputType === 'insertText'
+   *     ? Option.map(data, value => Message.InsertedText({ value }))
+   *     : Option.none(),
+   * )
+   * ```
+   */
+  OnBeforeInputPreventDefault: (
+    toMaybeMessage: (
+      inputType: string,
+      data: Option.Option<string>,
+    ) => Option.Option<Message>,
+  ) => OnBeforeInputPreventDefault({ f: toMaybeMessage }),
   OnFileChange: (toMessage: (files: ReadonlyArray<File>) => Message) =>
     OnFileChange({ f: toMessage }),
   OnSubmit: (message: Message) => OnSubmit({ message }),
@@ -4808,6 +5184,24 @@ const htmlAttributes = <Message>(): HtmlAttributes<Message> => ({
    */
   OnCutText: (text: string, message: Message) => OnCutText({ text, message }),
   OnCancel: (message: Message) => OnCancel({ message }),
+  /**
+   * Cancel handler that always calls `preventDefault`. A native cancel event
+   * does not dispatch a Message. When the event is a `CustomEvent`, the
+   * optional `customEventMessage` is dispatched instead.
+   *
+   * Use this when native cancellation and an application-owned cancel signal
+   * share an event name but need different behavior. Without a Message, the
+   * attribute only suppresses the native default action.
+   *
+   * @example
+   * ```typescript
+   * h.OnCancelPreventDefault(Message.RequestedClose())
+   * ```
+   */
+  OnCancelPreventDefault: (customEventMessage?: Message) =>
+    OnCancelPreventDefault({
+      maybeCustomEventMessage: Option.fromNullishOr(customEventMessage),
+    }),
   OnToggle: (toMessage: (isOpen: boolean) => Message) =>
     OnToggle({ f: toMessage }),
   OnContextMenu: (message: Message) => OnContextMenu({ message }),
@@ -5145,13 +5539,7 @@ export type HtmlBuilder<Message> = MessageUniverse<Message> &
   HtmlAttributes<Message> &
   Readonly<{
     empty: null
-    keyed: (
-      tagName: TagName,
-    ) => (
-      key: PropertyKey,
-      attributes?: ReadonlyArray<Attribute<Message> | ChildAttribute>,
-      children?: ReadonlyArray<Child>,
-    ) => Html
+    keyed: KeyedFunction<Message>
     submodel: <View extends AnySubmodelView>(
       config: SubmodelConfig<View, Message>,
     ) => Html

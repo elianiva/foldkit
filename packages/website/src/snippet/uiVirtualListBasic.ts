@@ -1,18 +1,18 @@
 // Pseudocode walkthrough of the Foldkit integration points. Each labeled
 // block below is an excerpt. Fit them into your own Model, init, Message,
 // update, view, and subscription definitions.
-import { Option, Schema as S } from 'effect'
+import { Option, Schema } from 'effect'
 import { Subscription, Update } from 'foldkit'
 import type { HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { VirtualList } from '@foldkit/ui'
 
 // Add a field to your Model for the VirtualList Submodel. The list items
 // stay in your domain Model (your own `activities`, `messages`, `rows`,
 // whatever you call them); only scroll and measurement state live here:
-const Model = S.Struct({
+const Model = Schema.Struct({
   activityList: VirtualList.Model,
   // ...your other fields, including the items array you want to render
 })
@@ -41,7 +41,7 @@ const foldActivityList = Update.foldChild({
   update: VirtualList.update,
   read: (model: Model) => Option.some(model.activityList),
   write: (model, nextActivityList) =>
-    evo(model, { activityList: () => nextActivityList }),
+    modifyFields(model, { activityList: () => nextActivityList }),
   toParentMessage: message => Message.GotActivityListMessage({ message }),
 })
 
@@ -49,7 +49,7 @@ const foldActivityListScrollToIndex = Update.foldChild({
   update: VirtualList.scrollToIndex,
   read: (model: Model) => Option.some(model.activityList),
   write: (model, nextActivityList) =>
-    evo(model, { activityList: () => nextActivityList }),
+    modifyFields(model, { activityList: () => nextActivityList }),
   toParentMessage: message => Message.GotActivityListMessage({ message }),
 })
 
@@ -68,7 +68,7 @@ const activityListSubscriptions = Subscription.lift({
   toParentMessage: message => Message.GotActivityListMessage({ message }),
 })
 
-const subscriptions = Subscription.aggregate<Model, Message>()(
+const subscriptions = Subscription.aggregate(
   activityListSubscriptions,
   // ...your other subscription records
 )

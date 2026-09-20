@@ -1,8 +1,9 @@
-import { Schema as S } from 'effect'
+import { Schema } from 'effect'
 
 import { File } from '../../file/index.js'
 import type { Html, HtmlBuilder } from '../../html/index.js'
 import { defineMessageUnion } from '../../message/index.js'
+import { modifyFields } from '../../struct/index.js'
 import type * as Update from '../../update/index.js'
 
 // MODEL
@@ -16,7 +17,7 @@ export const initialModel: Model = { receivedFiles: [] }
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  ReceivedFiles: { files: S.Array(File) },
+  ReceivedFiles: { files: Schema.Array(File) },
 })
 
 export type Message = typeof Message.Type
@@ -26,7 +27,7 @@ export type Message = typeof Message.Type
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ReceivedFiles: ({ files }) => ({
-      model: { ...model, receivedFiles: files },
+      model: modifyFields(model, { receivedFiles: () => files }),
     }),
   })
 

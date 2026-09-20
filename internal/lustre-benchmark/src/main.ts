@@ -1,49 +1,49 @@
-import { Array, Match as M, Option, Schema as S, String } from 'effect'
+import { Array, Match, Option, Schema, String } from 'effect'
 import { Runtime, type Update } from 'foldkit'
 import { Document, Html, type HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 // MODEL
 
-const Todo = S.Struct({
-  id: S.String,
-  text: S.String,
-  completed: S.Boolean,
+const Todo = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String,
+  completed: Schema.Boolean,
 })
 export type Todo = typeof Todo.Type
 
-const Todos = S.Array(Todo)
+const Todos = Schema.Array(Todo)
 export type Todos = typeof Todos.Type
 
-const Filter = S.Literals(['All', 'Active', 'Completed'])
+const Filter = Schema.Literals(['All', 'Active', 'Completed'])
 export type Filter = typeof Filter.Type
 
 const EditingState = defineTaggedUnion({
   NotEditing: {},
-  Editing: { id: S.String, text: S.String },
+  Editing: { id: Schema.String, text: Schema.String },
 })
 export type EditingState = typeof EditingState.Type
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   todos: Todos,
-  newTodoText: S.String,
+  newTodoText: Schema.String,
   filter: Filter,
   editing: EditingState,
-  nextTodoId: S.Number,
+  nextTodoId: Schema.Number,
 })
 export type Model = typeof Model.Type
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  UpdatedNewTodo: { text: S.String },
-  UpdatedEditingTodo: { text: S.String },
+  UpdatedNewTodo: { text: Schema.String },
+  UpdatedEditingTodo: { text: Schema.String },
   AddedTodo: {},
-  DeletedTodo: { id: S.String },
-  ToggledTodo: { id: S.String },
-  StartedEditing: { id: S.String },
+  DeletedTodo: { id: Schema.String },
+  ToggledTodo: { id: Schema.String },
+  StartedEditing: { id: Schema.String },
   SavedEdit: {},
   CancelledEdit: {},
   ToggledAll: {},
@@ -73,7 +73,7 @@ export const update = (model: Model, message: Message): UpdateReturn =>
   /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
   updateHandlers[message._tag](model, message as never)
 
-// NOTE: hot-path dispatch. A `M.value(...).pipe(M.tagsExhaustive(...))`
+// NOTE: hot-path dispatch. A `Match.value(...).pipe(Match.tagsExhaustive(...))`
 // matcher is constructed per call; done per Message it is measurable on the
 // benchmark, so update dispatches through a handler record built once. The
 // mapped type keeps the record exhaustive over the Message union.
@@ -86,7 +86,7 @@ type UpdateHandlers = {
 
 const updateHandlers: UpdateHandlers = {
   UpdatedNewTodo: (model, { text }) => ({
-    model: evo(model, {
+    model: modifyFields(model, {
       newTodoText: () => text,
     }),
   }),
@@ -97,7 +97,7 @@ const updateHandlers: UpdateHandlers = {
     }
     const editingId = model.editing.id
     return {
-      model: evo(model, {
+      model: modifyFields(model, {
         editing: () => EditingState.Editing({ id: editingId, text }),
       }),
     }
@@ -116,7 +116,7 @@ const updateHandlers: UpdateHandlers = {
     }
 
     return {
-      model: evo(model, {
+      model: modifyFields(model, {
         todos: () => [...model.todos, newTodo],
         newTodoText: () => '',
         nextTodoId: nextTodoId => nextTodoId + 1,
@@ -125,17 +125,17 @@ const updateHandlers: UpdateHandlers = {
   },
 
   DeletedTodo: (model, { id }) => ({
-    model: evo(model, {
+    model: modifyFields(model, {
       todos: () => Array.filter(model.todos, todo => todo.id !== id),
     }),
   }),
 
   ToggledTodo: (model, { id }) => ({
-    model: evo(model, {
+    model: modifyFields(model, {
       todos: () =>
         Array.map(model.todos, todo =>
           todo.id === id
-            ? evo(todo, { completed: completed => !completed })
+            ? modifyFields(todo, { completed: completed => !completed })
             : todo,
         ),
     }),
@@ -144,7 +144,7 @@ const updateHandlers: UpdateHandlers = {
   StartedEditing: (model, { id }) => {
     const maybeTodo = Array.findFirst(model.todos, todo => todo.id === id)
     return {
-      model: evo(model, {
+      model: modifyFields(model, {
         editing: () =>
           EditingState.Editing({
             id,
@@ -166,17 +166,19 @@ const updateHandlers: UpdateHandlers = {
     const text = String.trim(model.editing.text)
     if (String.isEmpty(text)) {
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           editing: () => EditingState.NotEditing(),
         }),
       }
     }
 
     return {
-      model: evo(model, {
+      model: modifyFields(model, {
         todos: () =>
           Array.map(model.todos, todo =>
-            todo.id === editingId ? evo(todo, { text: () => text }) : todo,
+            todo.id === editingId
+              ? modifyFields(todo, { text: () => text })
+              : todo,
           ),
         editing: () => EditingState.NotEditing(),
       }),
@@ -184,7 +186,7 @@ const updateHandlers: UpdateHandlers = {
   },
 
   CancelledEdit: model => ({
-    model: evo(model, {
+    model: modifyFields(model, {
       editing: () => EditingState.NotEditing(),
     }),
   }),
@@ -192,10 +194,10 @@ const updateHandlers: UpdateHandlers = {
   ToggledAll: model => {
     const allCompleted = Array.every(model.todos, todo => todo.completed)
     return {
-      model: evo(model, {
+      model: modifyFields(model, {
         todos: () =>
           Array.map(model.todos, todo =>
-            evo(todo, {
+            modifyFields(todo, {
               completed: () => !allCompleted,
             }),
           ),
@@ -204,13 +206,13 @@ const updateHandlers: UpdateHandlers = {
   },
 
   ClearedCompleted: model => ({
-    model: evo(model, {
+    model: modifyFields(model, {
       todos: () => Array.filter(model.todos, todo => !todo.completed),
     }),
   }),
 
   SelectedFilter: (model, { filter }) => ({
-    model: evo(model, {
+    model: modifyFields(model, {
       filter: () => filter,
     }),
   }),
@@ -280,10 +282,10 @@ const editingTodoView = (
         h.OnInput(text => Message.UpdatedEditingTodo({ text })),
         h.OnBlur(Message.SavedEdit()),
         h.OnKeyDownPreventDefault(key =>
-          M.value(key).pipe(
-            M.when('Enter', () => Option.some(Message.SavedEdit())),
-            M.when('Escape', () => Option.some(Message.CancelledEdit())),
-            M.orElse(() => Option.none()),
+          Match.value(key).pipe(
+            Match.when('Enter', () => Option.some(Message.SavedEdit())),
+            Match.when('Escape', () => Option.some(Message.CancelledEdit())),
+            Match.orElse(() => Option.none()),
           ),
         ),
       ]),
@@ -291,7 +293,7 @@ const editingTodoView = (
   )
 }
 
-// NOTE: hot-path helpers. `M.value(...).pipe(M.tagsExhaustive(...))`
+// NOTE: hot-path helpers. `Match.value(...).pipe(Match.tagsExhaustive(...))`
 // constructs a fresh matcher on every call; done per todo per frame it
 // dominates view time, so these run on the tag directly.
 const todoItemView =

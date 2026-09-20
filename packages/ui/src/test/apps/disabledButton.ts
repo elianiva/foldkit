@@ -1,15 +1,15 @@
-import { Match as M, Option, Schema as S } from 'effect'
+import { Option, Schema } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import * as Update from 'foldkit/update'
 
 import * as Dialog from '../../dialog/index.js'
 
 // MODEL
 
-export const Model = S.Struct({
-  isEnabled: S.Boolean,
+export const Model = Schema.Struct({
+  isEnabled: Schema.Boolean,
   dialog: Dialog.Model,
 })
 export type Model = typeof Model.Type
@@ -27,23 +27,23 @@ export type Message = typeof Message.Type
 
 export const initialModel: Model = {
   isEnabled: false,
-  dialog: Dialog.init({ id: 'test-dialog', isOpen: true }),
+  dialog: Dialog.boot({ id: 'test-dialog' }).model,
 }
 
 // UPDATE
 
-const foldDialogOutMessage = M.type<Dialog.OutMessage>().pipe(
-  M.withReturnType<Update.Step<Model, Message>>(),
-  M.tagsExhaustive({
-    Opened: () => model => ({ model }),
-    Closed: () => model => ({ model }),
-  }),
-)
+const foldDialogOutMessage = Dialog.OutMessage.match<
+  Update.Step<Model, Message>
+>({
+  Opened: () => model => ({ model }),
+  Closed: () => model => ({ model }),
+})
 
 const foldDialog = Update.foldChild({
   update: Dialog.update,
   read: (model: Model) => Option.some(model.dialog),
-  write: (model, nextDialog) => evo(model, { dialog: () => nextDialog }),
+  write: (model, nextDialog) =>
+    modifyFields(model, { dialog: () => nextDialog }),
   toParentMessage: message => Message.GotDialogMessage({ message }),
   foldOutMessage: foldDialogOutMessage,
 })
@@ -51,7 +51,7 @@ const foldDialog = Update.foldChild({
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedToggle: () => ({
-      model: evo(model, { isEnabled: isEnabled => !isEnabled }),
+      model: modifyFields(model, { isEnabled: isEnabled => !isEnabled }),
     }),
     ClickedSubmit: () => ({ model }),
     GotDialogMessage: ({ message: dialogMessage }) =>

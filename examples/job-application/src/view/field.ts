@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Match as M } from 'effect'
+import { Match } from 'effect'
 import { FieldValidation } from 'foldkit'
 import { type Field } from 'foldkit/fieldValidation'
 import type { Html, HtmlBuilder } from 'foldkit/html'
@@ -14,7 +14,7 @@ const borderClass = (field: Field<string>): string =>
     onInvalid: () => 'border-red-500',
   })
 
-export const inputField = <ParentMessage>(
+export const input = <ParentMessage>(
   config: Readonly<{
     id: string
     label: string
@@ -31,6 +31,7 @@ export const inputField = <ParentMessage>(
       value: config.field.value,
       onInput: config.onInput,
       isInvalid: config.field._tag === 'Invalid',
+      hasDescription: config.field._tag === 'Invalid',
       ...(config.type !== undefined && { type: config.type }),
       ...(config.placeholder !== undefined && {
         placeholder: config.placeholder,
@@ -50,17 +51,17 @@ export const inputField = <ParentMessage>(
                   ],
                   [config.label],
                 ),
-                ...M.value(config.field).pipe(
-                  M.tag('Validating', () => [
+                ...Match.value(config.field).pipe(
+                  Match.tag('Validating', () => [
                     h.span(
                       [h.Class('text-blue-600 text-sm animate-spin')],
                       ['◐'],
                     ),
                   ]),
-                  M.tag('Valid', () => [
+                  Match.tag('Valid', () => [
                     h.span([h.Class('text-green-600 text-sm')], ['✓']),
                   ]),
-                  M.orElse(() => []),
+                  Match.orElse(() => []),
                 ),
               ],
             ),
@@ -90,7 +91,7 @@ export const inputField = <ParentMessage>(
     h,
   )
 
-export const checkboxField = <ParentMessage>(
+export const checkbox = <ParentMessage>(
   config: Readonly<{
     id: string
     label: string
@@ -138,7 +139,7 @@ export const checkboxField = <ParentMessage>(
     h,
   )
 
-export const textareaField = <ParentMessage>(
+export const textarea = <ParentMessage>(
   config: Readonly<{
     id: string
     label: string

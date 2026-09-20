@@ -1,17 +1,17 @@
-import { Effect, Number, Option, Schema as S } from 'effect'
+import { Effect, Number, Option, Schema } from 'effect'
 
 import type { Html, HtmlBuilder } from '../../html/index.js'
 import { defineMessageUnion } from '../../message/index.js'
 import * as Mount from '../../mount/index.js'
-import { evo } from '../../struct/index.js'
+import { modifyFields } from '../../struct/index.js'
 import type * as Update from '../../update/index.js'
 
 // MODEL
 
-export const Model = S.Struct({
-  isOpen: S.Boolean,
-  measuredWidth: S.OptionFromNullOr(S.Number),
-  count: S.Number,
+export const Model = Schema.Struct({
+  isOpen: Schema.Boolean,
+  measuredWidth: Schema.OptionFromNullOr(Schema.Number),
+  count: Schema.Number,
 })
 export type Model = typeof Model.Type
 
@@ -19,11 +19,11 @@ export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
   ClickedToggle: {},
-  MeasuredPanel: { width: S.Number },
+  MeasuredPanel: { width: Schema.Number },
   CompletedFocusButton: {},
-  FailedMountSidebar: { reason: S.String },
+  FailedMountSidebar: { reason: Schema.String },
   ClickedIncrement: {},
-  ScrolledTo: { offset: S.Number },
+  ScrolledTo: { offset: Schema.Number },
 })
 
 export type Message = typeof Message.Type
@@ -49,7 +49,7 @@ export const FocusButton = Mount.define('FocusButton', {
 })
 
 export const ScrollList = Mount.define('ScrollList', {
-  args: { offset: S.Number },
+  args: { offset: Schema.Number },
   messages: [Message.ScrolledTo],
   execute: ({ element, offset }) =>
     Effect.sync(() => {
@@ -73,15 +73,15 @@ export const initialModel: Model = {
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedToggle: () => ({
-      model: evo(model, { isOpen: isOpen => !isOpen }),
+      model: modifyFields(model, { isOpen: isOpen => !isOpen }),
     }),
     MeasuredPanel: ({ width }) => ({
-      model: evo(model, { measuredWidth: () => Option.some(width) }),
+      model: modifyFields(model, { measuredWidth: () => Option.some(width) }),
     }),
     CompletedFocusButton: () => ({ model }),
     FailedMountSidebar: () => ({ model }),
     ClickedIncrement: () => ({
-      model: evo(model, { count: Number.increment }),
+      model: modifyFields(model, { count: Number.increment }),
     }),
     ScrolledTo: () => ({ model }),
   })

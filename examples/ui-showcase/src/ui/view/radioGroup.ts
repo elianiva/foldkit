@@ -3,7 +3,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 
 import { RadioGroup } from '@foldkit/ui'
 
-import { UiMessage } from '../message'
+import { Message as UiMessage } from '../message'
 import { type Plan, type UiModel } from '../model'
 
 export const PlanRadioGroup = RadioGroup.create<Plan>()
@@ -79,6 +79,7 @@ export const view = Submodel.defineView<UiModel, UiMessage>(
             selectedValue: model.verticalRadioGroupDemoValue,
             options: plans,
             ariaLabel: 'Server plan',
+            hasOptionDescription: () => true,
             toView: ({ group, options }) =>
               h.div(
                 [...group, h.Class(verticalGroupClassName)],
@@ -142,6 +143,7 @@ export const view = Submodel.defineView<UiModel, UiMessage>(
             options: plans,
             ariaLabel: 'Server plan',
             orientation: 'Horizontal',
+            hasOptionDescription: () => true,
             toView: ({ group, options }) =>
               h.div(
                 [...group, h.Class(horizontalGroupClassName)],

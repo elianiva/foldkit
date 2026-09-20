@@ -1,16 +1,16 @@
 // Pseudocode walkthrough of the Foldkit integration points. Each labeled
 // block below is an excerpt. Fit them into your own Model, init, Message,
 // update, and view definitions.
-import { Match as M, Option, Schema as S } from 'effect'
+import { Option, Schema } from 'effect'
 import { Update } from 'foldkit'
 import type { HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Dialog } from '@foldkit/ui'
 
 // Add a field to your Model for the Dialog Submodel:
-const Model = S.Struct({
+const Model = Schema.Struct({
   dialog: Dialog.Model,
   // ...your other fields
 })
@@ -34,17 +34,16 @@ type Message = typeof Message.Type
 
 // One boundary handles Dialog Messages, Commands, and OutMessages. Replace
 // either no-op arm with the parent transition that should follow that event.
-const foldDialogOutMessage = M.type<Dialog.OutMessage>().pipe(
-  M.withReturnType<Update.Step<Model, Message>>(),
-  M.tagsExhaustive({
-    Opened: () => model => ({ model }),
-    Closed: () => model => ({ model }),
-  }),
-)
+const foldDialogOutMessage = Dialog.OutMessage.match<
+  Update.Step<Model, Message>
+>({
+  Opened: () => model => ({ model }),
+  Closed: () => model => ({ model }),
+})
 
 const readDialog = (model: Model) => Option.some(model.dialog)
 const writeDialog = (model: Model, dialog: Dialog.Model): Model =>
-  evo(model, { dialog: () => dialog })
+  modifyFields(model, { dialog: () => dialog })
 const toGotDialogMessage = (message: Dialog.Message): Message =>
   Message.GotDialogMessage({ message })
 
@@ -80,6 +79,7 @@ const view = (h: HtmlBuilder<Message>) =>
         model: model.dialog,
         view: Dialog.view,
         viewInputs: {
+          hasDescription: true,
           toView: ({
             dialog,
             backdrop,

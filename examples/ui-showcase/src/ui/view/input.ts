@@ -3,7 +3,7 @@ import type { Html } from 'foldkit/html'
 
 import { Input } from '@foldkit/ui'
 
-import { UiMessage } from '../message'
+import { Message as UiMessage } from '../message'
 import type { UiModel } from '../model'
 
 const inputClassName =
@@ -31,6 +31,7 @@ export const view = Submodel.defineView<UiModel, UiMessage>(
               {
                 id: 'input-basic-demo',
                 value: model.inputDemoValue,
+                hasDescription: true,
                 onInput: value => UiMessage.UpdatedInputDemoValue({ value }),
                 placeholder: 'Enter your full name',
                 toView: attributes =>
@@ -65,6 +66,7 @@ export const view = Submodel.defineView<UiModel, UiMessage>(
           {
             id: 'input-disabled-demo',
             isDisabled: true,
+            hasDescription: true,
             value: 'Ada Lovelace',
             toView: attributes =>
               h.div(

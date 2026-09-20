@@ -9,6 +9,7 @@ import {
   buildUnresolvedDevDeps,
   dependencyExample,
   devCommand,
+  foldkitSubtreeRef,
   installCommand,
   scaffoldDevDependencies,
 } from './packages.js'
@@ -39,7 +40,7 @@ describe('buildUnresolvedDevDeps', () => {
   it('merges template tooling with the example, letting concrete example versions win over the release marker', () => {
     const result = buildUnresolvedDevDeps(
       {
-        prettier: '^3.8.4',
+        oxfmt: '^0.65.0',
         typescript: '^6.0.3',
         vite: '^8.0.16',
         '@foldkit/vite-plugin': 'workspace:*',
@@ -52,10 +53,9 @@ describe('buildUnresolvedDevDeps', () => {
       '@foldkit/vite-plugin': { _tag: 'Release' },
       '@foldkit/devtools-mcp': { _tag: 'Release' },
       '@foldkit/oxlint-plugin': { _tag: 'Release' },
-      '@trivago/prettier-plugin-sort-imports': { _tag: 'Release' },
       'happy-dom': { _tag: 'Release' },
+      oxfmt: { _tag: 'Keep', version: '^0.65.0' },
       oxlint: { _tag: 'Release' },
-      prettier: { _tag: 'Keep', version: '^3.8.4' },
       vitest: { _tag: 'Release' },
       typescript: { _tag: 'Keep', version: '^6.0.3' },
       vite: { _tag: 'Keep', version: '^8.0.16' },
@@ -87,6 +87,46 @@ describe('scaffoldDevDependencies', () => {
     ).toEqual([])
     expect(scaffoldDevDependencies(Scaffold.Ssg())).toEqual(['@types/node'])
     expect(scaffoldDevDependencies(Scaffold.Ssr())).toEqual(['@types/node'])
+  })
+})
+
+describe('foldkitSubtreeRef', () => {
+  const sourceCommit = '4aab52dcbe58d06414a74e108307b9bcdab56df6'
+
+  it('pins a stable release to the foldkit tag for the released version', () => {
+    expect(
+      foldkitSubtreeRef({
+        schemaVersion: 1,
+        channel: 'stable',
+        sourceCommit,
+        packages: { foldkit: '0.156.0', '@foldkit/ui': '0.42.0' },
+        dependencies: { effect: '4.0.0-beta.106' },
+      }),
+    ).toBe('foldkit@0.156.0')
+  })
+
+  it('pins a canary release to its source commit, which no tag names', () => {
+    expect(
+      foldkitSubtreeRef({
+        schemaVersion: 1,
+        channel: 'canary',
+        sourceCommit,
+        packages: { foldkit: `0.156.0-canary.${sourceCommit.slice(0, 12)}` },
+        dependencies: {},
+      }),
+    ).toBe(sourceCommit)
+  })
+
+  it('falls back to the source commit when a stable manifest omits foldkit', () => {
+    expect(
+      foldkitSubtreeRef({
+        schemaVersion: 1,
+        channel: 'stable',
+        sourceCommit,
+        packages: {},
+        dependencies: {},
+      }),
+    ).toBe(sourceCommit)
   })
 })
 

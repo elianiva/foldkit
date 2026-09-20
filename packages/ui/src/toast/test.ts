@@ -1,10 +1,6 @@
 import * as Story from 'foldkit/story'
 
-import {
-  Message as AnimationMessage,
-  WaitForAnimationSettled,
-  WaitForPaint,
-} from '../animation/index.js'
+import * as Animation from '../animation/index.js'
 import { Message } from './schema.js'
 import { WaitBeforeDismissal } from './update.js'
 
@@ -19,7 +15,7 @@ export type DrainEntryInput = Readonly<{
 
 const DEFAULT_VERSION = 0
 
-/** Builds a {@link Story.Command.resolveAll} step that drains a single toast
+/** Builds a `Story.Command.resolveAll` step that drains a single toast
  *  entry's full animation and dismiss lifecycle. Resolving these Commands in
  *  order takes a freshly shown entry from its enter animation through
  *  auto-dismiss and its exit animation, ending with the entry removed from the
@@ -55,12 +51,12 @@ export const drainEntry = ({
   version = DEFAULT_VERSION,
 }: DrainEntryInput) =>
   Story.Command.resolveAll(
-    [WaitForPaint, AnimationMessage.CompletedWaitForPaint()],
-    [WaitForAnimationSettled, AnimationMessage.EndedAnimation()],
+    [Animation.WaitForPaint, Animation.Message.CompletedWaitForPaint()],
+    [Animation.WaitForAnimationSettled, Animation.Message.EndedAnimation()],
     [
       WaitBeforeDismissal,
       Message.CompletedWaitBeforeDismissal({ entryId, version }),
     ],
-    [WaitForPaint, AnimationMessage.CompletedWaitForPaint()],
-    [WaitForAnimationSettled, AnimationMessage.EndedAnimation()],
+    [Animation.WaitForPaint, Animation.Message.CompletedWaitForPaint()],
+    [Animation.WaitForAnimationSettled, Animation.Message.EndedAnimation()],
   )

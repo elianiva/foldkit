@@ -1,17 +1,21 @@
-import { Array, Match as M, Option, Result, String as String_ } from 'effect'
+import { Array, Match, Option, Result, String } from 'effect'
 import { inertHtml as ih } from 'foldkit/html'
 import { describe, expect, test } from 'vitest'
 
+import * as Markdown from '@foldkit/markdown'
 import { parseMarkdown } from '@foldkit/markdown/vite'
 
+import { type CodeBlock } from '../component'
 import { PostFrontmatter } from '../page/blog/frontmatter'
 import comingFromReactSource from '../page/comingFromReact/comingFromReact.md?raw'
 import { FAQ_IDS } from '../page/comingFromReact/faq'
 import comboboxPageSource from '../page/ui/comboboxPage.md?raw'
 import { collectDemoLabels } from './demoLabel'
 import { islandAttributes } from './islandAttributes'
+import { docIslands } from './islands'
 import { parseHeadingId, slugify, stripHeadingIdMarker } from './slug'
 import { collectHeadings } from './tableOfContents'
+import { docViews } from './views'
 
 // NOTE: mirrors the options the website's markdown plugin runs with, so a check
 // over every page's source reads the same documents the site builds.
@@ -96,10 +100,12 @@ describe('collectHeadings', () => {
   })
 
   test('honors a trailing {#id} override that follows inline formatting', () => {
-    const document = parseMarkdown('## Use **evo** {#use-evo}')
+    const document = parseMarkdown(
+      '## Use **modifyFields** {#use-modifyFields}',
+    )
 
     expect(collectHeadings(document).tableOfContents).toEqual([
-      { level: 'h2', id: 'use-evo', text: 'Use evo' },
+      { level: 'h2', id: 'use-modifyFields', text: 'Use modifyFields' },
     ])
   })
 })
@@ -137,6 +143,44 @@ describe('Demo island', () => {
     expect(() =>
       parseMarkdown('::Demo', { islands: islandAttributes }),
     ).toThrow()
+  })
+})
+
+describe('copy control identity', () => {
+  test('uses structural occurrence indices for code blocks and snippets', () => {
+    const document = parseMarkdown(
+      '```ts\nconst first = 1\n```\n\n::Snippet{name="sceneLocators"}\n\n```ts\nconst second = 2\n```\n\n::Snippet{name="sceneLocators"}',
+      { islands: islandAttributes },
+    )
+    const { idByHeading } = collectHeadings(document)
+    const demoLabels = collectDemoLabels(document, idByHeading)
+    const ids: Array<string> = []
+    const renderCopyButton: CodeBlock.RenderCopyButton = config => {
+      ids.push(config.id)
+      return ih.empty
+    }
+    const renderHeadingLink = () => ih.empty
+
+    Markdown.view(document, {
+      views: docViews({
+        pageId: 'copy-identities',
+        idByHeading,
+        renderCopyButton,
+        renderHeadingLink,
+      }),
+      islands: docIslands(
+        { demos: {}, renderCopyButton, renderHeadingLink },
+        demoLabels,
+        'copy-identities',
+      ),
+    })
+
+    expect(ids).toEqual([
+      'copy-identities-code-0',
+      'copy-identities-snippet-sceneLocators-0',
+      'copy-identities-code-1',
+      'copy-identities-snippet-sceneLocators-1',
+    ])
   })
 })
 
@@ -182,7 +226,7 @@ describe('faq island registration', () => {
       Object.entries(markdownSources),
       ([markdownPath, source]) =>
         markdownPath !== COMING_FROM_REACT_PATH &&
-        String(source).includes(':::Faq')
+        globalThis.String(source).includes(':::Faq')
           ? Result.succeed(markdownPath)
           : Result.failVoid,
     )
@@ -201,7 +245,10 @@ describe('demo island registration', () => {
   const demoUsages = Array.filterMap(
     Object.entries(markdownSources),
     ([markdownPath, source]) => {
-      const names = capturedNames(String(source), DEMO_ISLAND_PATTERN)
+      const names = capturedNames(
+        globalThis.String(source),
+        DEMO_ISLAND_PATTERN,
+      )
 
       return Array.match(names, {
         onEmpty: () => Result.failVoid,
@@ -224,7 +271,7 @@ describe('demo island registration', () => {
       expect(pageSource, `no page module at ${pagePath}`).toBeDefined()
 
       for (const name of names) {
-        expect(String(pageSource)).toContain(`'${name}'`)
+        expect(globalThis.String(pageSource)).toContain(`'${name}'`)
       }
     },
   )
@@ -248,8 +295,8 @@ describe('snippet island registration', () => {
       ),
       path =>
         Result.fromOption(
-          Option.map(Array.last(String_.split(path, '/')), fileName =>
-            String_.replace(SNIPPET_EXTENSION_PATTERN, '')(fileName),
+          Option.map(Array.last(String.split(path, '/')), fileName =>
+            String.replace(SNIPPET_EXTENSION_PATTERN, '')(fileName),
           ),
           () => undefined,
         ),
@@ -259,7 +306,10 @@ describe('snippet island registration', () => {
   const snippetUsages = Array.filterMap(
     Object.entries(markdownSources),
     ([markdownPath, source]) => {
-      const names = capturedNames(String(source), SNIPPET_ISLAND_PATTERN)
+      const names = capturedNames(
+        globalThis.String(source),
+        SNIPPET_ISLAND_PATTERN,
+      )
 
       return Array.match(names, {
         onEmpty: () => Result.failVoid,
@@ -288,9 +338,9 @@ type HeadingOverride = Readonly<{ id: string; text: string }>
 
 const explicitHeadingIds = (source: string): ReadonlyArray<HeadingOverride> =>
   Array.filterMap(parseMarkdown(source, markdownOptions).blocks, block =>
-    M.value(block).pipe(
-      M.withReturnType<Result.Result<HeadingOverride, void>>(),
-      M.tag('Heading', heading => {
+    Match.value(block).pipe(
+      Match.withReturnType<Result.Result<HeadingOverride, void>>(),
+      Match.tag('Heading', heading => {
         const { maybeId, text } = parseHeadingId(heading.content)
 
         return Result.fromOption(
@@ -298,7 +348,7 @@ const explicitHeadingIds = (source: string): ReadonlyArray<HeadingOverride> =>
           () => undefined,
         )
       }),
-      M.orElse(() => Result.failVoid),
+      Match.orElse(() => Result.failVoid),
     ),
   )
 
@@ -311,7 +361,7 @@ describe('heading id overrides', () => {
   const overrideUsages = Array.filterMap(
     Object.entries(markdownSources),
     ([markdownPath, source]) =>
-      Array.match(explicitHeadingIds(String(source)), {
+      Array.match(explicitHeadingIds(globalThis.String(source)), {
         onEmpty: () => Result.failVoid,
         onNonEmpty: overrides => Result.succeed({ markdownPath, overrides }),
       }),
@@ -342,7 +392,10 @@ describe('demo section labels', () => {
   const labelUsages = Array.filterMap(
     Object.entries(markdownSources),
     ([markdownPath, source]) => {
-      const names = capturedNames(String(source), DEMO_ISLAND_PATTERN)
+      const names = capturedNames(
+        globalThis.String(source),
+        DEMO_ISLAND_PATTERN,
+      )
 
       return Array.match(names, {
         onEmpty: () => Result.failVoid,
@@ -359,7 +412,7 @@ describe('demo section labels', () => {
   test.each(labelUsages)(
     '$markdownPath labels every demo with the heading above it',
     ({ markdownPath, names, source }) => {
-      const document = parseMarkdown(String(source), markdownOptions)
+      const document = parseMarkdown(globalThis.String(source), markdownOptions)
       const demoLabels = collectDemoLabels(
         document,
         collectHeadings(document).idByHeading,

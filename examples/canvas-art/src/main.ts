@@ -1,16 +1,8 @@
-import {
-  Array,
-  Effect,
-  Number,
-  Option,
-  Random,
-  Schema as S,
-  pipe,
-} from 'effect'
+import { Array, Effect, Number, Option, Random, Schema, pipe } from 'effect'
 import { Canvas, Command, Runtime, Subscription, type Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Button } from '@foldkit/ui'
 
@@ -36,36 +28,36 @@ const PALETTE: ReadonlyArray<string> = [
 ]
 const FALLBACK_COLOR = '#ffffff'
 
-const Ball = S.Struct({
-  id: S.Number,
-  x: S.Number,
-  y: S.Number,
-  vx: S.Number,
-  vy: S.Number,
-  radius: S.Number,
-  color: S.String,
+const Ball = Schema.Struct({
+  id: Schema.Number,
+  x: Schema.Number,
+  y: Schema.Number,
+  vx: Schema.Number,
+  vy: Schema.Number,
+  radius: Schema.Number,
+  color: Schema.String,
 })
 type Ball = typeof Ball.Type
 
-export const Model = S.Struct({
-  balls: S.Array(Ball),
-  nextId: S.Number,
-  isRunning: S.Boolean,
+export const Model = Schema.Struct({
+  balls: Schema.Array(Ball),
+  nextId: Schema.Number,
+  isRunning: Schema.Boolean,
 })
 export type Model = typeof Model.Type
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  TickedFrame: { deltaTime: S.Number },
-  ClickedCanvas: { x: S.Number, y: S.Number },
+  TickedFrame: { deltaTime: Schema.Number },
+  ClickedCanvas: { x: Schema.Number, y: Schema.Number },
   CompletedGenerateBall: {
-    x: S.Number,
-    y: S.Number,
-    vx: S.Number,
-    vy: S.Number,
-    radius: S.Number,
-    color: S.String,
+    x: Schema.Number,
+    y: Schema.Number,
+    vx: Schema.Number,
+    vy: Schema.Number,
+    radius: Schema.Number,
+    color: Schema.String,
   },
   ClickedClear: {},
   ClickedTogglePlay: {},
@@ -82,7 +74,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
 // COMMAND
 
 export const GenerateBall = Command.define('GenerateBall', {
-  args: { x: S.Number, y: S.Number },
+  args: { x: Schema.Number, y: Schema.Number },
   messages: [Message.CompletedGenerateBall],
   execute: ({ x, y }) =>
     Effect.gen(function* () {
@@ -121,7 +113,7 @@ const advanceBall =
     const maxY = CANVAS_HEIGHT - ball.radius
     const bouncedX = nextX < minX || nextX > maxX
     const bouncedY = nextY < minY || nextY > maxY
-    return evo(ball, {
+    return modifyFields(ball, {
       x: () => Math.max(minX, Math.min(maxX, nextX)),
       y: () => Math.max(minY, Math.min(maxY, nextY)),
       vx: vx => (bouncedX ? -vx : vx),
@@ -132,7 +124,7 @@ const advanceBall =
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     TickedFrame: ({ deltaTime }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         balls: Array.map(advanceBall(deltaTime / MS_PER_SECOND)),
       }),
     }),
@@ -143,7 +135,7 @@ export const update = (model: Model, message: Message) =>
     }),
 
     CompletedGenerateBall: ({ x, y, vx, vy, radius, color }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         balls: Array.append({
           id: model.nextId,
           x,
@@ -157,10 +149,10 @@ export const update = (model: Model, message: Message) =>
       }),
     }),
 
-    ClickedClear: () => ({ model: evo(model, { balls: () => [] }) }),
+    ClickedClear: () => ({ model: modifyFields(model, { balls: () => [] }) }),
 
     ClickedTogglePlay: () => ({
-      model: evo(model, { isRunning: running => !running }),
+      model: modifyFields(model, { isRunning: running => !running }),
     }),
   })
 

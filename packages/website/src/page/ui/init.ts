@@ -20,9 +20,9 @@ import {
   VirtualList,
 } from '@foldkit/ui'
 
+import { Toast } from './demo/toastModule'
 import type { Message } from './message'
 import type { Model } from './model'
-import { Toast } from './toastModule'
 
 export type InitReturn = Update.Return<Model, Message>
 
@@ -84,6 +84,7 @@ export const init = (today: Calendar.CalendarDate): InitReturn => ({
     }),
     nestedDialogChildDemo: Dialog.init({ id: 'nested-dialog-child-demo' }),
     isDisclosureDemoOpen: false,
+    isDisclosureCollapsedPreviewDemoOpen: false,
     listboxDemo: Listbox.init({ id: 'listbox-demo' }),
     maybeListboxDemoSelectedItem: Option.none(),
     listboxMultiDemo: Listbox.Multi.init({
@@ -145,9 +146,13 @@ export const init = (today: Calendar.CalendarDate): InitReturn => ({
     dragAndDropDemo: DragAndDrop.init({
       id: 'drag-and-drop-demo',
     }),
+    dragAndDropDemoAnnouncement: '',
     fileDropBasicDemo: FileDrop.init({ id: 'file-drop-basic-demo' }),
     fileDropBasicDemoFiles: [],
-    toastDemo: Toast.init({ id: 'toast-demo' }),
+    toastDemo: Toast.init({
+      id: 'toast-demo',
+      swipeToDismiss: {},
+    }),
     maybeLastDismissedToastTitle: Option.none(),
     tooltipDemo: Tooltip.init({ id: 'tooltip-demo' }),
     hoverIntentCardDemo: HoverIntent.init(),

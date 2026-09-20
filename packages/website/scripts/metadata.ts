@@ -1,4 +1,4 @@
-import { Array, Match as M, Option } from 'effect'
+import { Array, Match, Option } from 'effect'
 
 import {
   BLOG_DESCRIPTION,
@@ -55,29 +55,24 @@ const METADATA_BY_TAG: Record<StaticRouteTag, PageMetadata> = {
     description: SITE_DESCRIPTION,
     section: '',
   },
-  Manifesto: docs(
-    'Manifesto',
+  WhyFoldkit: docs(
+    'Why Foldkit',
     'Why Foldkit exists and the principles behind its design.',
     'Docs',
-  ),
-  WhyNoJsx: docs(
-    'Why no JSX?',
-    'Why Foldkit uses a typed function-call DSL instead of JSX, with side-by-side comparisons of buttons, inputs, and conditional rendering.',
-    'FAQ',
   ),
   Performance: docs(
     'Performance',
     'Foldkit’s rendering cost model, TodoMVC benchmark results, development-mode overhead, and the tools for measuring and memoizing expensive views.',
     'FAQ',
   ),
-  GettingStarted: docs(
-    'Getting Started',
+  GetStarted: docs(
+    'Get Started',
     'Create a Foldkit project from a starter, inspect the generated structure, or add Foldkit to an existing Vite application.',
     'Docs',
   ),
   Roadmap: docs(
     'Roadmap',
-    'The work that gates Foldkit 1.0, experimental features available today, possible directions after 1.0, and architectural decisions that will not change.',
+    'Where Foldkit is today, how it got here, the work remaining before 1.0, and the architectural promises that will not change.',
     'Docs',
   ),
   ComingFromReact: docs(
@@ -157,7 +152,7 @@ const METADATA_BY_TAG: Record<StaticRouteTag, PageMetadata> = {
   ),
   BestPracticesImmutability: docs(
     'Immutability',
-    'Update Models immutably with evo, preserving references for unchanged branches and keeping state transitions predictable.',
+    'Update Models immutably with modifyFields, preserving references for unchanged branches and keeping state transitions predictable.',
     'Best Practices',
   ),
   ProjectOrganization: docs(
@@ -187,7 +182,7 @@ const METADATA_BY_TAG: Record<StaticRouteTag, PageMetadata> = {
   ),
   CoreUpdate: core(
     'Update',
-    'Handle every Message with a pure update function that returns the next Model and Commands. Use Match and evo to keep transitions exhaustive and immutable.',
+    'Handle every Message with a pure update function that returns the next Model and Commands. Use Match and modifyFields to keep transitions exhaustive and immutable.',
   ),
   CoreView: core(
     'View',
@@ -271,7 +266,7 @@ const METADATA_BY_TAG: Record<StaticRouteTag, PageMetadata> = {
   ),
   CorePreserveScroll: core(
     'Preserve Scroll',
-    'Restore window scroll position across Vite HMR reloads. Covers when restoration runs and its window-only scope.',
+    'Restore window scroll position across Vite dev reloads. Covers when restoration runs and its window-only scope.',
   ),
   CoreViewMemoization: core(
     'View Memoization',
@@ -285,9 +280,17 @@ const METADATA_BY_TAG: Record<StaticRouteTag, PageMetadata> = {
     'Submodel',
     'Split a large application into child state machines while preserving parent-to-child Message flow. Covers Update.foldChild, h.submodel, OutMessages, reflection, testing, and DevTools.',
   ),
+  CoreMachine: core(
+    'Machine',
+    'Model multi-state workflows as typed transition tables with guards, shared Edges, update integration, structural analysis, and pure tests.',
+  ),
   AsyncData: core(
     'Async Data',
     'A six-state value type for asynchronously loaded data in the Model: Idle, Loading, Refreshing, Failure, Stale, and Success, with stale-while-revalidate and keep-stale-on-failure built in.',
+  ),
+  PatternsAntiPatterns: pattern(
+    'Anti-patterns',
+    'Architectural warning signs in Foldkit apps, with idiomatic replacements for ambiguous state, leaky Submodel boundaries, misplaced side effects, stale async results, Command ordering, and live handles.',
   ),
   PatternsInformingSubmodels: pattern(
     'Informing Submodels',
@@ -466,9 +469,9 @@ export const routeToMetadata = (
   route: AppRoute,
   resolveApiModuleName: ApiModuleNameResolver,
 ): PageMetadata =>
-  M.value(route).pipe(
-    M.withReturnType<PageMetadata>(),
-    M.tag('ApiModule', ({ moduleSlug }) => {
+  Match.value(route).pipe(
+    Match.withReturnType<PageMetadata>(),
+    Match.tag('ApiModule', ({ moduleSlug }) => {
       const moduleName = resolveApiModuleName(moduleSlug)
       return docs(
         moduleName,
@@ -476,7 +479,7 @@ export const routeToMetadata = (
         'API Reference',
       )
     }),
-    M.tag('BlogPost', ({ postSlug }) => {
+    Match.tag('BlogPost', ({ postSlug }) => {
       const { frontmatter } = Option.getOrThrowWith(
         Array.findFirst(blogPosts, ({ slug }) => slug === postSlug),
         () =>
@@ -486,7 +489,7 @@ export const routeToMetadata = (
       )
       return docs(frontmatter.title, frontmatter.description, BLOG_SECTION)
     }),
-    M.tag('ExampleDetail', ({ exampleSlug }) => {
+    Match.tag('ExampleDetail', ({ exampleSlug }) => {
       const example = Option.getOrThrowWith(
         findBySlug(exampleSlug),
         () =>
@@ -496,7 +499,7 @@ export const routeToMetadata = (
       )
       return docs(example.title, example.description, 'Examples')
     }),
-    M.tag('Playground', ({ exampleSlug }) => {
+    Match.tag('Playground', ({ exampleSlug }) => {
       const example = Option.getOrThrowWith(
         findBySlug(exampleSlug),
         () =>
@@ -510,5 +513,5 @@ export const routeToMetadata = (
         'Playground',
       )
     }),
-    M.orElse(({ _tag }) => METADATA_BY_TAG[_tag]),
+    Match.orElse(({ _tag }) => METADATA_BY_TAG[_tag]),
   )

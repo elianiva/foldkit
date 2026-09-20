@@ -1,7 +1,7 @@
 import { codeToHtml } from 'shiki'
 import type { Plugin } from 'vite'
 
-import { shikiDarkTheme, shikiLightTheme } from '../src/shikiTheme'
+import { shikiDarkTheme, shikiLightTheme } from '../src/shikiTheme.ts'
 
 const shikiThemes = {
   light: shikiLightTheme,
@@ -72,7 +72,6 @@ const demoCodeToHtml = async (
   const importLines = importsCode.trimEnd().split('\n')
   const bodyLines = bodyCode.trimEnd().split('\n')
   const lines = [...importLines, '', ...bodyLines]
-  const lineDigits = String(bodyLines.length).length
   const tokens = phaseTokensByLine(bodyLines, phaseRegions)
 
   const html = await codeToHtml(lines.join('\n'), {
@@ -85,7 +84,7 @@ const demoCodeToHtml = async (
     })),
   })
 
-  return html.replace('<pre ', `<pre data-line-digits="${lineDigits}" `)
+  return html
 }
 
 const demoCodePlugin = (
@@ -120,17 +119,17 @@ const demoCodePlugin = (
 
 const COUNTER_DEMO_CODE_ID = 'virtual:counter-demo-code'
 
-const DEMO_IMPORTS = `import { Effect, Schema as S } from 'effect'
+const DEMO_IMPORTS = `import { Effect, Schema } from 'effect'
 import { Command, Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'`
+import { modifyFields } from 'foldkit/struct'`
 
 const DEMO_CODE = `// MODEL
 
-const Model = S.Struct({
-  count: S.Number,
-  isResetting: S.Boolean,
-  resetDuration: S.Number,
+const Model = Schema.Struct({
+  count: Schema.Number,
+  isResetting: Schema.Boolean,
+  resetDuration: Schema.Number,
 })
 type Model = typeof Model.Type
 
@@ -138,7 +137,7 @@ type Model = typeof Model.Type
 
 const Message = defineMessageUnion({
   ClickedIncrement: {},
-  ChangedResetDuration: { seconds: S.Number },
+  ChangedResetDuration: { seconds: Schema.Number },
   ClickedResetAfterDelay: {},
   CompletedDelayReset: {},
 })
@@ -147,7 +146,7 @@ type Message = typeof Message.Type
 // COMMAND
 
 const DelayReset = Command.define('DelayReset', {
-  args: { seconds: S.Number },
+  args: { seconds: Schema.Number },
   messages: [Message.CompletedDelayReset],
   execute: ({ seconds }) =>
     Effect.as(
@@ -162,33 +161,33 @@ type UpdateReturn = Update.Return<Model, Message>
 const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     ClickedIncrement: () => ({
-      model: evo(model, { count: count => count + 1 }),
+      model: modifyFields(model, { count: count => count + 1 }),
     }),
     ChangedResetDuration: ({ seconds }) => ({
-      model: evo(model, { resetDuration: () => seconds }),
+      model: modifyFields(model, { resetDuration: () => seconds }),
     }),
     ClickedResetAfterDelay: () => ({
-      model: evo(model, { isResetting: () => true }),
+      model: modifyFields(model, { isResetting: () => true }),
       commands: [DelayReset({ seconds: model.resetDuration })],
     }),
     CompletedDelayReset: () => ({
-      model: evo(model, { count: () => 0, isResetting: () => false }),
+      model: modifyFields(model, { count: () => 0, isResetting: () => false }),
     }),
   })`
 
 const COUNTER_PHASE_REGIONS: PhaseRegions = {
   IncrementMessage: [{ from: '  ClickedIncrement: {},' }],
   IncrementUpdate: [{ from: '    ClickedIncrement: () => ({', to: '    }),' }],
-  IncrementModel: [{ from: 'const Model = S.Struct({', to: '})' }],
+  IncrementModel: [{ from: 'const Model = Schema.Struct({', to: '})' }],
   DurationMessage: [
     {
-      from: '  ChangedResetDuration: { seconds: S.Number },',
+      from: '  ChangedResetDuration: { seconds: Schema.Number },',
     },
   ],
   DurationUpdate: [
     { from: '    ChangedResetDuration: ({ seconds }) => ({', to: '    }),' },
   ],
-  DurationModel: [{ from: '  resetDuration: S.Number,' }],
+  DurationModel: [{ from: '  resetDuration: Schema.Number,' }],
   ResetMessage: [{ from: '  ClickedResetAfterDelay: {},' }],
   ResetUpdate: [
     { from: '    ClickedResetAfterDelay: () => ({', to: '    }),' },
@@ -201,7 +200,7 @@ const COUNTER_PHASE_REGIONS: PhaseRegions = {
   ResetCommandUpdate: [
     { from: '    CompletedDelayReset: () => ({', to: '    }),' },
   ],
-  ResetModel: [{ from: 'const Model = S.Struct({', to: '})' }],
+  ResetModel: [{ from: 'const Model = Schema.Struct({', to: '})' }],
 }
 
 /** Serves the async counter demo source as a virtual module of highlighted HTML. */
@@ -216,26 +215,26 @@ export const counterDemoCodePlugin = (): Plugin =>
 
 const NOTE_PLAYER_DEMO_CODE_ID = 'virtual:note-player-demo-code'
 
-const NOTE_PLAYER_DEMO_IMPORTS = `import { Array, Context, Effect, Layer, Schema as S } from 'effect'
+const NOTE_PLAYER_DEMO_IMPORTS = `import { Array, Context, Effect, Layer, Schema } from 'effect'
 import { Command, Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
-import { evo } from 'foldkit/struct'`
+import { modifyFields } from 'foldkit/struct'`
 
 const NOTE_PLAYER_DEMO_CODE = `// MODEL
 
-const Note = S.Literals(['A', 'B', 'C', 'D', 'E', 'F', 'G'])
+const Note = Schema.Literals(['A', 'B', 'C', 'D', 'E', 'F', 'G'])
 type Note = typeof Note.Type
 
 const PlaybackState = defineTaggedUnion({
   Idle: {},
-  Playing: { currentNoteIndex: S.Number },
-  Paused: { currentNoteIndex: S.Number },
+  Playing: { currentNoteIndex: Schema.Number },
+  Paused: { currentNoteIndex: Schema.Number },
 })
 
-const Model = S.Struct({
-  noteSequence: S.Array(Note),
-  noteDuration: S.Number,
+const Model = Schema.Struct({
+  noteSequence: Schema.Array(Note),
+  noteDuration: Schema.Number,
   playbackState: PlaybackState,
 })
 type Model = typeof Model.Type
@@ -245,7 +244,7 @@ type Model = typeof Model.Type
 const Message = defineMessageUnion({
   ClickedPlay: {},
   ClickedPause: {},
-  CompletedPlayNote: { noteIndex: S.Number },
+  CompletedPlayNote: { noteIndex: Schema.Number },
 })
 type Message = typeof Message.Type
 
@@ -257,7 +256,7 @@ const playNoteAt = (
   model: Model,
   noteIndex: number,
 ): UpdateReturn => ({
-  model: evo(model, {
+  model: modifyFields(model, {
     playbackState: () => PlaybackState.Playing({ currentNoteIndex: noteIndex }),
   }),
   commands: [
@@ -280,7 +279,7 @@ const update = (model: Model, message: Message) =>
     ClickedPause: () =>
       PlaybackState.match<UpdateReturn>(model.playbackState, {
         Playing: ({ currentNoteIndex }) => ({
-          model: evo(model, {
+          model: modifyFields(model, {
             playbackState: () => PlaybackState.Paused({ currentNoteIndex }),
           }),
         }),
@@ -294,7 +293,7 @@ const update = (model: Model, message: Message) =>
       if (playbackState._tag !== 'Playing') {
         return { model }
       } else if (nextCurrentNoteIndex >= noteSequence.length) {
-        return { model: evo(model, { playbackState: () => PlaybackState.Idle() }) }
+        return { model: modifyFields(model, { playbackState: () => PlaybackState.Idle() }) }
       } else {
         return playNoteAt(model, nextCurrentNoteIndex)
       }
@@ -316,7 +315,7 @@ class AudioContextService extends Context.Service<
 // COMMAND
 
 const PlayNote = Command.define('PlayNote', {
-  args: { note: Note, duration: S.Number, noteIndex: S.Number },
+  args: { note: Note, duration: Schema.Number, noteIndex: Schema.Number },
   messages: [Message.CompletedPlayNote],
   execute: ({ note, duration, noteIndex }) =>
     Effect.gen(function* () {
@@ -344,13 +343,13 @@ const NOTE_PLAYER_PHASE_REGIONS: PhaseRegions = {
     { from: '    ClickedPlay: () =>', to: '      }),' },
     { from: 'const playNoteAt = (', to: '})' },
   ],
-  PlayModel: [{ from: 'const Model = S.Struct({', to: '})' }],
-  NoteMessage: [{ from: '  CompletedPlayNote: { noteIndex: S.Number },' }],
+  PlayModel: [{ from: 'const Model = Schema.Struct({', to: '})' }],
+  NoteMessage: [{ from: '  CompletedPlayNote: { noteIndex: Schema.Number },' }],
   NoteUpdate: [
     { from: '    CompletedPlayNote: ({ noteIndex }) => {', to: '    },' },
     { from: 'const playNoteAt = (', to: '})' },
   ],
-  NoteModel: [{ from: 'const Model = S.Struct({', to: '})' }],
+  NoteModel: [{ from: 'const Model = Schema.Struct({', to: '})' }],
   NoteCommand: [
     { from: "const PlayNote = Command.define('PlayNote', {", to: '})' },
   ],

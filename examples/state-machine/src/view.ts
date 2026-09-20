@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { Array, Match as M, Option, pipe } from 'effect'
+import { Array, Match, Option, pipe } from 'effect'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 
 import { Button, Checkbox, Input, RadioGroup } from '@foldkit/ui'
@@ -80,15 +80,15 @@ const progressSteps: ReadonlyArray<string> = [
 const stateToMaybeProgressStep = (
   state: typeof CheckoutState.Type,
 ): Option.Option<string> =>
-  M.value(state).pipe(
-    M.tags({
+  Match.value(state).pipe(
+    Match.tags({
       Cart: () => 'Bag',
       Shipping: () => 'Delivery',
       Payment: () => 'Payment',
       Review: () => 'Review',
       Cancelled: () => 'Bag',
     }),
-    M.option,
+    Match.option,
   )
 
 const currentProgressIndex = (state: typeof CheckoutState.Type): number =>
@@ -140,13 +140,13 @@ const orderPricing = (
 const stateToMaybeDiscount = (
   state: typeof CheckoutState.Type,
 ): Option.Option<typeof Discount.Type> =>
-  M.value(state).pipe(
-    M.tags({
+  Match.value(state).pipe(
+    Match.tags({
       Review: reviewState => promoToMaybeDiscount(reviewState.promo),
       Placing: placingState => placingState.maybeDiscount,
       Confirmed: confirmedState => confirmedState.maybeDiscount,
     }),
-    M.option,
+    Match.option,
     Option.flatten,
   )
 
@@ -483,6 +483,7 @@ const cartView = (
               options: EDITIONS,
               ariaLabel: 'Choose an edition',
               orientation: 'Horizontal',
+              hasOptionDescription: () => true,
               toView: ({ group, options }) =>
                 h.div(
                   [...group, h.Class('grid gap-3 sm:grid-cols-2')],
@@ -722,6 +723,7 @@ const paymentView = (
             {
               id: 'saved-card',
               isChecked: state.isPaymentMethodSelected,
+              hasDescription: true,
               onToggle: isSelected =>
                 Message.ToggledPaymentMethod({ isSelected }),
               toView: attributes =>
@@ -1053,6 +1055,7 @@ const reviewView = (
         {
           id: 'accept-terms',
           isChecked: state.isTermsAccepted,
+          hasDescription: true,
           onToggle: isAccepted => Message.ToggledTermsAccepted({ isAccepted }),
           toView: attributes =>
             h.div(

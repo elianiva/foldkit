@@ -1,16 +1,16 @@
 // Pseudocode walkthrough of the Foldkit integration points. Each labeled
 // block below is an excerpt. Fit them into your own Model, init, Message,
 // update, and view definitions.
-import { Schema as S } from 'effect'
+import { Schema } from 'effect'
 import type { HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Checkbox } from '@foldkit/ui'
 
 // Store the checked state as a plain boolean field in your Model:
-const Model = S.Struct({
-  acceptedTerms: S.Boolean,
+const Model = Schema.Struct({
+  acceptedTerms: Schema.Boolean,
   // ...your other fields
 })
 
@@ -25,14 +25,14 @@ const init = () => ({
 // A verb-first, past-tense Message carries the new checked state:
 
 const Message = defineMessageUnion({
-  ToggledTerms: { isChecked: S.Boolean },
+  ToggledTerms: { isChecked: Schema.Boolean },
 })
 
 // In the corresponding Message.match handler, store the value.
 // This is the moment to fire analytics, validate a form, or push the value
 // to a backend.
 ToggledTerms: ({ isChecked }) => ({
-  model: evo(model, { acceptedTerms: () => isChecked }),
+  model: modifyFields(model, { acceptedTerms: () => isChecked }),
 })
 
 // Inside your view function, render the checkbox with Checkbox.view. It reads
@@ -42,6 +42,7 @@ const view = (model, h: HtmlBuilder<Message>) =>
     {
       id: 'accept-terms',
       isChecked: model.acceptedTerms,
+      hasDescription: true,
       onToggle: isChecked => Message.ToggledTerms({ isChecked }),
       toView: attributes =>
         h.div(

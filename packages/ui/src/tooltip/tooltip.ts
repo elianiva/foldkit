@@ -3,17 +3,17 @@ import {
   Effect,
   Equal,
   Function,
-  Match as M,
+  Match,
   Number,
   Option,
   Predicate,
-  Schema as S,
+  Schema,
   pipe,
 } from 'effect'
 import * as Command from 'foldkit/command'
 import { type ChildAttribute, type Html, childAttributes } from 'foldkit/html'
 import * as Mount from 'foldkit/mount'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { type Reflect, defineView } from 'foldkit/submodel'
 import * as Update from 'foldkit/update'
 
@@ -24,15 +24,15 @@ import { Message, OutMessage } from './message.js'
 // MODEL
 
 /** Schema for the tooltip component's state. `isOpen` is visibility; `isHovered` tracks pointer on trigger; `isFocused` tracks tooltip-affirming focus on the trigger (focus arriving without a preceding mouse press, like keyboard, touch, or pen; mouse-click-induced focus is excluded since it doesn't affirm the user wants the tooltip visible); `isDismissed` suppresses re-opening after the user dismissed the tooltip (via Escape) until they disengage (leave or blur). `showDelay` is the hover-to-show duration. `maybeLastPointerType` records the most recent pointer type that pressed the trigger, so a mouse-click-induced focus can be distinguished from other focus. */
-export const Model = S.Struct({
-  id: S.String,
-  isOpen: S.Boolean,
-  isHovered: S.Boolean,
-  isFocused: S.Boolean,
-  isDismissed: S.Boolean,
-  showDelay: S.DurationFromMillis,
-  pendingShowVersion: S.Number,
-  maybeLastPointerType: S.Option(S.String),
+export const Model = Schema.Struct({
+  id: Schema.String,
+  isOpen: Schema.Boolean,
+  isHovered: Schema.Boolean,
+  isFocused: Schema.Boolean,
+  isDismissed: Schema.Boolean,
+  showDelay: Schema.DurationFromMillis,
+  pendingShowVersion: Schema.Number,
+  maybeLastPointerType: Schema.Option(Schema.String),
 })
 
 export type Model = typeof Model.Type
@@ -77,7 +77,7 @@ export const init = (config: InitConfig): Model => ({
 /** Waits for the tooltip's show delay before emitting
  *  `CompletedWaitBeforeShowing`. */
 export const WaitBeforeShowing = Command.define('WaitBeforeShowing', {
-  args: { delay: S.DurationFromMillis, version: S.Number },
+  args: { delay: Schema.DurationFromMillis, version: Schema.Number },
   messages: [Message.CompletedWaitBeforeShowing],
   execute: ({ delay, version }) =>
     Effect.sleep(delay).pipe(
@@ -87,7 +87,7 @@ export const WaitBeforeShowing = Command.define('WaitBeforeShowing', {
 
 /** The anchor-positioning Mount this Tooltip renders on its panel. */
 export const AnchorTooltip = Mount.define('AnchorTooltip', {
-  args: { buttonId: S.String, anchor: AnchorConfig },
+  args: { buttonId: Schema.String, anchor: AnchorConfig },
   messages: [Message.CompletedAnchorTooltip],
   execute: ({ element, buttonId, anchor }) =>
     Effect.gen(function* () {
@@ -109,12 +109,12 @@ const computeUpdate = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     EnteredTrigger: () => {
       if (model.isOpen || model.isDismissed) {
-        return { model: evo(model, { isHovered: () => true }) }
+        return { model: modifyFields(model, { isHovered: () => true }) }
       }
 
       const nextVersion = Number.increment(model.pendingShowVersion)
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           isHovered: () => true,
           pendingShowVersion: () => nextVersion,
         }),
@@ -125,7 +125,7 @@ const computeUpdate = (model: Model, message: Message) =>
     },
 
     LeftTrigger: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         isHovered: () => false,
         isOpen: () => model.isFocused && model.isOpen,
         isDismissed: () => false,
@@ -141,7 +141,7 @@ const computeUpdate = (model: Model, message: Message) =>
 
       if (isFromMousePress) {
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             maybeLastPointerType: () => Option.none(),
           }),
         }
@@ -149,7 +149,7 @@ const computeUpdate = (model: Model, message: Message) =>
 
       if (model.isDismissed) {
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             isFocused: () => true,
             maybeLastPointerType: () => Option.none(),
           }),
@@ -157,7 +157,7 @@ const computeUpdate = (model: Model, message: Message) =>
       }
 
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           isFocused: () => true,
           isOpen: () => true,
           pendingShowVersion: Number.increment,
@@ -166,7 +166,7 @@ const computeUpdate = (model: Model, message: Message) =>
     },
 
     BlurredTrigger: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         isFocused: () => false,
         isOpen: () => model.isHovered && model.isOpen,
         isDismissed: () => false,
@@ -176,7 +176,7 @@ const computeUpdate = (model: Model, message: Message) =>
     }),
 
     PressedEscape: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         isOpen: () => false,
         isDismissed: () => true,
         pendingShowVersion: Number.increment,
@@ -184,7 +184,7 @@ const computeUpdate = (model: Model, message: Message) =>
     }),
 
     PressedPointerOnTrigger: ({ pointerType }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         maybeLastPointerType: () => Option.some(pointerType),
       }),
     }),
@@ -198,7 +198,7 @@ const computeUpdate = (model: Model, message: Message) =>
         return { model }
       }
 
-      return { model: evo(model, { isOpen: () => true }) }
+      return { model: modifyFields(model, { isOpen: () => true }) }
     },
 
     CompletedAnchorTooltip: () => ({ model }),
@@ -240,7 +240,9 @@ export const update = (
 export const reflectShowDelay: Reflect<Model, Duration.Input> = Function.dual(
   2,
   (model: Model, showDelay: Duration.Input): Model =>
-    evo(model, { showDelay: () => Duration.fromInputUnsafe(showDelay) }),
+    modifyFields(model, {
+      showDelay: () => Duration.fromInputUnsafe(showDelay),
+    }),
 )
 
 // VIEW
@@ -293,9 +295,11 @@ export const view = defineView<Model, Message, ViewInputs>(
     const handleTriggerKeyDown = (
       key: string,
     ): Option.Option<typeof Message.PressedEscape.Type> =>
-      M.value(key).pipe(
-        M.when('Escape', () => OptionExt.when(isOpen, Message.PressedEscape())),
-        M.orElse(() => Option.none()),
+      Match.value(key).pipe(
+        Match.when('Escape', () =>
+          OptionExt.when(isOpen, Message.PressedEscape()),
+        ),
+        Match.orElse(() => Option.none()),
       )
 
     const handleTriggerPointerDown = (

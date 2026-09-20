@@ -1,17 +1,17 @@
-import { Number, Schema as S } from 'effect'
+import { Number, Schema } from 'effect'
 
 import type { Html, HtmlBuilder } from '../../html/index.js'
 import { defineMessageUnion } from '../../message/index.js'
-import { evo } from '../../struct/index.js'
+import { modifyFields } from '../../struct/index.js'
 import type * as Update from '../../update/index.js'
 
 // MODEL
 
-export const Model = S.Struct({
-  clicks: S.Number,
-  childClicks: S.Number,
-  doubleClicks: S.Number,
-  submissions: S.Number,
+export const Model = Schema.Struct({
+  clicks: Schema.Number,
+  childClicks: Schema.Number,
+  doubleClicks: Schema.Number,
+  submissions: Schema.Number,
 })
 export type Model = typeof Model.Type
 
@@ -39,16 +39,16 @@ export const initialModel: Model = {
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedChild: () => ({
-      model: evo(model, { childClicks: Number.increment }),
+      model: modifyFields(model, { childClicks: Number.increment }),
     }),
     ClickedContainer: () => ({
-      model: evo(model, { clicks: Number.increment }),
+      model: modifyFields(model, { clicks: Number.increment }),
     }),
     DoubleClickedContainer: () => ({
-      model: evo(model, { doubleClicks: Number.increment }),
+      model: modifyFields(model, { doubleClicks: Number.increment }),
     }),
     SubmittedForm: () => ({
-      model: evo(model, { submissions: Number.increment }),
+      model: modifyFields(model, { submissions: Number.increment }),
     }),
   })
 

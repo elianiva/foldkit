@@ -1,15 +1,15 @@
-import { Schema as S } from 'effect'
+import { Schema } from 'effect'
 
 import type { Html, HtmlBuilder } from '../../html/index.js'
 import { defineMessageUnion } from '../../message/index.js'
-import { evo } from '../../struct/index.js'
+import { modifyFields } from '../../struct/index.js'
 import type * as Update from '../../update/index.js'
 
 // MODEL
 
-const FocusState = S.Literals(['Outside', 'Within'])
+const FocusState = Schema.Literals(['Outside', 'Within'])
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   focusState: FocusState,
 })
 export type Model = typeof Model.Type
@@ -33,10 +33,10 @@ export const initialModel: Model = {
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     EnteredFocusRegion: () => ({
-      model: evo(model, { focusState: () => 'Within' }),
+      model: modifyFields(model, { focusState: () => 'Within' }),
     }),
     LeftFocusRegion: () => ({
-      model: evo(model, { focusState: () => 'Outside' }),
+      model: modifyFields(model, { focusState: () => 'Outside' }),
     }),
   })
 

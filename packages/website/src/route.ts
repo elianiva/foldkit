@@ -1,4 +1,4 @@
-import { Schema as S, pipe } from 'effect'
+import { Schema, String, pipe } from 'effect'
 import {
   defineRouteUnion,
   literal,
@@ -16,15 +16,14 @@ import type { CallableTaggedStruct } from 'foldkit/schema'
 
 export const AppRoute = defineRouteUnion({
   Home: {},
-  Manifesto: {},
-  WhyNoJsx: {},
+  WhyFoldkit: {},
   Performance: {},
   ComingFromReact: {},
   ComingFromTanStackQuery: {},
   ReactComparison: {},
   EffectAtomComparison: {},
   ElmComparison: {},
-  GettingStarted: {},
+  GetStarted: {},
   Roadmap: {},
   RoutingAndNavigation: {},
   FieldValidation: {},
@@ -32,16 +31,16 @@ export const AppRoute = defineRouteUnion({
   TestingStory: {},
   TestingScene: {},
   Examples: {},
-  ExampleDetail: { exampleSlug: S.String },
+  ExampleDetail: { exampleSlug: Schema.String },
   TypingTerminal: {},
-  Playground: { exampleSlug: S.String },
+  Playground: { exampleSlug: Schema.String },
   BestPracticesSideEffects: {},
   BestPracticesMessages: {},
   BestPracticesKeying: {},
   BestPracticesImmutability: {},
   ProjectOrganization: {},
   ToolingLinting: {},
-  ApiModule: { moduleSlug: S.String },
+  ApiModule: { moduleSlug: Schema.String },
   CoreArchitecture: {},
   CoreCounterExample: {},
   CoreModel: {},
@@ -71,7 +70,9 @@ export const AppRoute = defineRouteUnion({
   CoreViewMemoization: {},
   CoreEmbedding: {},
   CoreSubmodel: {},
+  CoreMachine: {},
   AsyncData: {},
+  PatternsAntiPatterns: {},
   PatternsInformingSubmodels: {},
   PatternsSubscriptionOrganization: {},
   UiOverview: {},
@@ -112,21 +113,20 @@ export const AppRoute = defineRouteUnion({
   AiMcp: {},
   Newsletter: {},
   Blog: {},
-  BlogPost: { postSlug: S.String },
-  NotFound: { path: S.String },
+  BlogPost: { postSlug: Schema.String },
+  NotFound: { path: Schema.String },
 })
 export type AppRoute = typeof AppRoute.Type
 
 export const DocsRoute = AppRoute.subset([
-  'Manifesto',
-  'WhyNoJsx',
+  'WhyFoldkit',
   'Performance',
   'ComingFromReact',
   'ComingFromTanStackQuery',
   'ReactComparison',
   'EffectAtomComparison',
   'ElmComparison',
-  'GettingStarted',
+  'GetStarted',
   'Roadmap',
   'RoutingAndNavigation',
   'FieldValidation',
@@ -172,7 +172,9 @@ export const DocsRoute = AppRoute.subset([
   'CoreViewMemoization',
   'CoreEmbedding',
   'CoreSubmodel',
+  'CoreMachine',
   'AsyncData',
+  'PatternsAntiPatterns',
   'PatternsInformingSubmodels',
   'PatternsSubscriptionOrganization',
   'UiOverview',
@@ -223,7 +225,12 @@ export const isPlaygroundRoute = AppRoute.isAnyOf(['Playground'])
 
 export const isBlogRoute = AppRoute.isAnyOf(['Blog', 'BlogPost'])
 
-const isDocsUnionRoute = S.is(DocsRoute)
+const isMarketingRoute = AppRoute.isAnyOf(['Home', 'Newsletter'])
+
+const isDocsUnionRoute = Schema.is(DocsRoute)
+
+export const isSearchRoute = (route: AppRoute): boolean =>
+  isDocsUnionRoute(route) || isBlogRoute(route) || isMarketingRoute(route)
 
 /**
  * Whether a route belongs to the documentation section, which is what the
@@ -249,6 +256,7 @@ const section =
     pipe(literal(sectionSlug), slash(literal(pageSlug)), mapTo(route))
 
 const getStarted = section('get-started')
+const introduction = section('introduction')
 const faq = section('faq')
 const react = section('react')
 const elm = section('elm')
@@ -262,15 +270,15 @@ const ai = section('ai')
 
 export const homeRouter = pipe(root, mapTo(AppRoute.Home))
 
-export const manifestoRouter = getStarted('manifesto', AppRoute.Manifesto)
-export const gettingStartedRouter = getStarted(
-  'getting-started',
-  AppRoute.GettingStarted,
-)
+export const whyFoldkitRouter = introduction('why-foldkit', AppRoute.WhyFoldkit)
+export const getStartedRouter = staticPage('get-started', AppRoute.GetStarted)
 
-export const roadmapRouter = staticPage('roadmap', AppRoute.Roadmap)
+export const roadmapRouter = introduction('roadmap', AppRoute.Roadmap)
 
-export const whyNoJsxRouter = faq('why-no-jsx', AppRoute.WhyNoJsx)
+const whyFoldkitFromGetStarted = getStarted('why-foldkit', AppRoute.WhyFoldkit)
+const getStartedFromNested = getStarted('getting-started', AppRoute.GetStarted)
+const roadmapFromRoot = staticPage('roadmap', AppRoute.Roadmap)
+
 export const performanceRouter = faq('performance', AppRoute.Performance)
 
 export const comingFromReactRouter = react(
@@ -422,8 +430,13 @@ export const coreViewMemoizationRouter = core(
 )
 export const coreEmbeddingRouter = core('embedding', AppRoute.CoreEmbedding)
 export const coreSubmodelRouter = core('submodel', AppRoute.CoreSubmodel)
+export const coreMachineRouter = core('machine', AppRoute.CoreMachine)
 export const asyncDataRouter = core('async-data', AppRoute.AsyncData)
 
+export const patternsAntiPatternsRouter = patterns(
+  'anti-patterns',
+  AppRoute.PatternsAntiPatterns,
+)
 export const patternsInformingSubmodelsRouter = patterns(
   'informing-submodels',
   AppRoute.PatternsInformingSubmodels,
@@ -476,9 +489,14 @@ export const aiMcpRouter = ai('mcp', AppRoute.AiMcp)
 
 // PARSER
 
-const getStartedParser = oneOf(manifestoRouter, gettingStartedRouter)
+const introductionParser = oneOf(
+  whyFoldkitRouter,
+  roadmapRouter,
+  whyFoldkitFromGetStarted,
+  roadmapFromRoot,
+)
 
-const faqParser = oneOf(whyNoJsxRouter, performanceRouter)
+const faqParser = performanceRouter
 
 const reactParser = oneOf(
   comingFromReactRouter,
@@ -531,12 +549,14 @@ const coreParser = oneOf(
   coreViewMemoizationRouter,
   coreEmbeddingRouter,
   coreSubmodelRouter,
+  coreMachineRouter,
   routingAndNavigationRouter,
   fieldValidationRouter,
   asyncDataRouter,
 )
 
 const patternsParser = oneOf(
+  patternsAntiPatternsRouter,
   patternsInformingSubmodelsRouter,
   patternsSubscriptionOrganizationRouter,
   projectOrganizationRouter,
@@ -592,9 +612,11 @@ const siteParser = oneOf(
   contentApiRouter,
 )
 
+const getStartedParser = oneOf(getStartedFromNested, getStartedRouter)
+
 const docsParser = oneOf(
   getStartedParser,
-  roadmapRouter,
+  introductionParser,
   faqParser,
   reactParser,
   elmParser,
@@ -625,7 +647,7 @@ export const blogPostRouter = pipe(
   slash(
     schemaSegment(
       'postSlug',
-      S.String.check(S.isPattern(BLOG_POST_SLUG_PATTERN)),
+      Schema.String.check(Schema.isPattern(BLOG_POST_SLUG_PATTERN)),
     ),
   ),
   mapTo(AppRoute.BlogPost),
@@ -646,3 +668,115 @@ export const urlToAppRoute = parseUrlWithFallback(
   routeParser,
   AppRoute.NotFound,
 )
+
+// URLS
+
+export const SITE_URL = 'https://foldkit.dev'
+
+export const routeToUrlPath = (route: AppRoute): string =>
+  AppRoute.match(route, {
+    Home: () => homeRouter(),
+    WhyFoldkit: () => whyFoldkitRouter(),
+    Performance: () => performanceRouter(),
+    GetStarted: () => getStartedRouter(),
+    Roadmap: () => roadmapRouter(),
+    ComingFromReact: () => comingFromReactRouter(),
+    ComingFromTanStackQuery: () => comingFromTanStackQueryRouter(),
+    ReactComparison: () => reactComparisonRouter(),
+    EffectAtomComparison: () => effectAtomComparisonRouter(),
+    ElmComparison: () => elmComparisonRouter(),
+    RoutingAndNavigation: () => routingAndNavigationRouter(),
+    FieldValidation: () => fieldValidationRouter(),
+    Testing: () => testingRouter(),
+    TestingStory: () => testingStoryRouter(),
+    TestingScene: () => testingSceneRouter(),
+    Examples: () => examplesRouter(),
+    ExampleDetail: ({ exampleSlug }) => exampleDetailRouter({ exampleSlug }),
+    TypingTerminal: () => typingTerminalRouter(),
+    BestPracticesSideEffects: () => bestPracticesSideEffectsRouter(),
+    BestPracticesMessages: () => bestPracticesMessagesRouter(),
+    BestPracticesKeying: () => bestPracticesKeyingRouter(),
+    BestPracticesImmutability: () => bestPracticesImmutabilityRouter(),
+    ProjectOrganization: () => projectOrganizationRouter(),
+    ToolingLinting: () => toolingLintingRouter(),
+    CoreArchitecture: () => coreArchitectureRouter(),
+    CoreCounterExample: () => coreCounterExampleRouter(),
+    CoreModel: () => coreModelRouter(),
+    CoreMessages: () => coreMessagesRouter(),
+    CoreUpdate: () => coreUpdateRouter(),
+    CoreView: () => coreViewRouter(),
+    CoreCommands: () => coreCommandsRouter(),
+    CoreMount: () => coreMountRouter(),
+    CoreCustomElement: () => coreCustomElementRouter(),
+    CoreSubscriptions: () => coreSubscriptionsRouter(),
+    CoreInitAndFlags: () => coreInitAndFlagsRouter(),
+    CoreDom: () => coreDomRouter(),
+    CoreRender: () => coreRenderRouter(),
+    CoreFile: () => coreFileRouter(),
+    CoreHttp: () => coreHttpRouter(),
+    CoreCanvas: () => coreCanvasRouter(),
+    CoreRuntime: () => coreRuntimeRouter(),
+    CoreServerRendering: () => coreServerRenderingRouter(),
+    CoreResources: () => coreResourcesRouter(),
+    CoreManagedResources: () => coreManagedResourcesRouter(),
+    CoreDevTools: () => coreDevToolsRouter(),
+    CoreCrashView: () => coreCrashViewRouter(),
+    CoreViewTransitions: () => coreViewTransitionsRouter(),
+    CoreSlowWarnings: () => coreSlowWarningsRouter(),
+    CoreFreezeModel: () => coreFreezeModelRouter(),
+    CorePreserveScroll: () => corePreserveScrollRouter(),
+    CoreSubmodel: () => coreSubmodelRouter(),
+    CoreMachine: () => coreMachineRouter(),
+    AsyncData: () => asyncDataRouter(),
+    PatternsAntiPatterns: () => patternsAntiPatternsRouter(),
+    PatternsInformingSubmodels: () => patternsInformingSubmodelsRouter(),
+    PatternsSubscriptionOrganization: () =>
+      patternsSubscriptionOrganizationRouter(),
+    CoreViewMemoization: () => coreViewMemoizationRouter(),
+    CoreEmbedding: () => coreEmbeddingRouter(),
+    UiOverview: () => uiOverviewRouter(),
+    UiSelectionSubmodels: () => uiSelectionSubmodelsRouter(),
+    UiTabs: () => uiTabsRouter(),
+    UiNav: () => uiNavRouter(),
+    UiDisclosure: () => uiDisclosureRouter(),
+    UiDialog: () => uiDialogRouter(),
+    UiMenu: () => uiMenuRouter(),
+    UiPopover: () => uiPopoverRouter(),
+    UiListbox: () => uiListboxRouter(),
+    UiRadioGroup: () => uiRadioGroupRouter(),
+    UiSelect: () => uiSelectRouter(),
+    UiSlider: () => uiSliderRouter(),
+    UiSwitch: () => uiSwitchRouter(),
+    UiButton: () => uiButtonRouter(),
+    UiCalendar: () => uiCalendarRouter(),
+    UiDatePicker: () => uiDatePickerRouter(),
+    UiCheckbox: () => uiCheckboxRouter(),
+    UiCombobox: () => uiComboboxRouter(),
+    UiInput: () => uiInputRouter(),
+    UiTextarea: () => uiTextareaRouter(),
+    UiFieldset: () => uiFieldsetRouter(),
+    UiDragAndDrop: () => uiDragAndDropRouter(),
+    UiFileDrop: () => uiFileDropRouter(),
+    UiHoverIntent: () => uiHoverIntentRouter(),
+    UiToast: () => uiToastRouter(),
+    UiTooltip: () => uiTooltipRouter(),
+    UiAnimation: () => uiAnimationRouter(),
+    UiAnchor: () => uiAnchorRouter(),
+    UiVirtualList: () => uiVirtualListRouter(),
+    AiOverview: () => aiOverviewRouter(),
+    AiSkills: () => aiSkillsRouter(),
+    AiMcp: () => aiMcpRouter(),
+    ApiModule: ({ moduleSlug }) => apiModuleRouter({ moduleSlug }),
+    ContentApi: () => contentApiRouter(),
+    About: () => aboutRouter(),
+    Contact: () => contactRouter(),
+    Privacy: () => privacyRouter(),
+    Playground: ({ exampleSlug }) => playgroundRouter({ exampleSlug }),
+    Newsletter: () => newsletterRouter(),
+    Blog: () => blogRouter(),
+    BlogPost: ({ postSlug }) => blogPostRouter({ postSlug }),
+    NotFound: ({ path }) => path,
+  })
+
+export const routeToCanonicalUrl = (route: AppRoute): string =>
+  String.concat(SITE_URL, routeToUrlPath(route))

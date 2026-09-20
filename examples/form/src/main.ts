@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Array, Duration, Effect, Random, Schema as S } from 'effect'
+import { Array, Duration, Effect, Random, Schema } from 'effect'
 import { Command, FieldValidation, Runtime, type Update } from 'foldkit'
 import {
   Field,
@@ -15,7 +15,7 @@ import {
 import { type Attribute, Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Button, Input, Textarea } from '@foldkit/ui'
 
@@ -33,16 +33,16 @@ const emailRules = makeRules({
 const Submission = defineTaggedUnion({
   NotSubmitted: {},
   Submitting: {},
-  SubmitSuccess: { confirmationText: S.String },
-  SubmitError: { error: S.String },
+  SubmitSuccess: { confirmationText: Schema.String },
+  SubmitError: { error: Schema.String },
 })
 
 type Submission = typeof Submission.Type
 
-export const Model = S.Struct({
-  name: Field(S.String),
-  email: Field(S.String),
-  messageText: Field(S.String),
+export const Model = Schema.Struct({
+  name: Field(Schema.String),
+  email: Field(Schema.String),
+  messageText: Field(Schema.String),
   submission: Submission,
 })
 export type Model = typeof Model.Type
@@ -50,12 +50,12 @@ export type Model = typeof Model.Type
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  UpdatedName: { value: S.String },
-  UpdatedEmail: { value: S.String },
-  CompletedValidateEmail: { field: Field(S.String) },
-  UpdatedMessageText: { value: S.String },
+  UpdatedName: { value: Schema.String },
+  UpdatedEmail: { value: Schema.String },
+  CompletedValidateEmail: { field: Field(Schema.String) },
+  UpdatedMessageText: { value: Schema.String },
   ClickedFormSubmit: {},
-  SucceededSubmitForm: { name: S.String },
+  SucceededSubmitForm: { name: Schema.String },
   FailedSubmitForm: {},
 })
 
@@ -89,7 +89,7 @@ const isEmailOnWaitlist = (email: string): Effect.Effect<boolean> =>
   })
 
 export const ValidateEmail = Command.define('ValidateEmail', {
-  args: { email: S.String },
+  args: { email: Schema.String },
   messages: [Message.CompletedValidateEmail],
   execute: ({ email }) =>
     Effect.gen(function* () {
@@ -122,7 +122,7 @@ const isFormValid = (model: Model): boolean =>
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     UpdatedName: ({ value }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         name: () => validateName(value),
       }),
     }),
@@ -132,14 +132,14 @@ export const update = (model: Model, message: Message) =>
 
       if (validateEmailResult._tag === 'Valid') {
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             email: () => Validating({ value }),
           }),
           commands: [ValidateEmail({ email: value })],
         }
       } else {
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             email: () => validateEmailResult,
           }),
         }
@@ -149,7 +149,7 @@ export const update = (model: Model, message: Message) =>
     CompletedValidateEmail: ({ field }) => {
       if (field.value === model.email.value) {
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             email: () => field,
           }),
         }
@@ -159,7 +159,7 @@ export const update = (model: Model, message: Message) =>
     },
 
     UpdatedMessageText: ({ value }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         messageText: () => Valid({ value }),
       }),
     }),
@@ -174,7 +174,7 @@ export const update = (model: Model, message: Message) =>
       }
 
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           submission: () => Submission.Submitting(),
         }),
         commands: [
@@ -188,7 +188,7 @@ export const update = (model: Model, message: Message) =>
     },
 
     SucceededSubmitForm: ({ name }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         submission: () =>
           Submission.SubmitSuccess({
             confirmationText: `Welcome to the waitlist, ${name}! We'll be in touch soon.`,
@@ -197,7 +197,7 @@ export const update = (model: Model, message: Message) =>
     }),
 
     FailedSubmitForm: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         submission: () =>
           Submission.SubmitError({
             error:
@@ -212,7 +212,11 @@ export const update = (model: Model, message: Message) =>
 const FAKE_API_DELAY_MS = 500
 
 export const SubmitForm = Command.define('SubmitForm', {
-  args: { name: S.String, email: S.String, messageText: S.String },
+  args: {
+    name: Schema.String,
+    email: Schema.String,
+    messageText: Schema.String,
+  },
   messages: [Message.SucceededSubmitForm, Message.FailedSubmitForm],
   execute: ({ name }) =>
     Effect.gen(function* () {
@@ -295,6 +299,7 @@ const inputFieldView = (
       value: field.value,
       onInput: onUpdate,
       isInvalid: field._tag === 'Invalid',
+      hasDescription: field._tag === 'Validating' || field._tag === 'Invalid',
       type,
       toView: attributes =>
         h.div(
@@ -331,6 +336,7 @@ const textareaFieldView = (
       value: field.value,
       onInput: onUpdate,
       isInvalid: field._tag === 'Invalid',
+      hasDescription: field._tag === 'Validating' || field._tag === 'Invalid',
       toView: attributes =>
         h.div(
           [h.Class('mb-4')],

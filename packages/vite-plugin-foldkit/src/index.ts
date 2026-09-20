@@ -8,13 +8,13 @@ import {
   Fiber,
   HashMap,
   HashSet,
-  Match as M,
+  Match,
   Option,
   Predicate,
   Queue,
   Ref,
-  Schema as S,
   Schedule,
+  Schema,
   Stream,
   pipe,
 } from 'effect'
@@ -30,7 +30,7 @@ import {
   PreserveModelMessage,
   RequestModelMessage,
   RestoreModelMessage,
-} from 'foldkit/hmr-protocol'
+} from 'foldkit/model-preservation'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import type {
@@ -49,6 +49,7 @@ import { foldkitViewIdentity } from './viewIdentity.js'
 
 export { type BrandDistResult, brandDistDirectory } from './brandDist.js'
 export {
+  FOLDKIT_FETCH_MODULE_ID,
   FoldkitBuildManifest,
   type FoldkitBuildOptions,
   type FoldkitPrerenderOptions,
@@ -71,20 +72,23 @@ export type FoldkitPluginOptions = Readonly<{
    */
   devToolsMcpPort?: number
   /**
-   * Serve server-rendered pages from the Vite dev server. When set, `vite`
-   * passes HTML navigations that fall through Vite, plus non-GET requests, to
-   * `renderPage` from the module at `ssr.serverEntry`. When `undefined` (the
-   * default), the dev server serves the client entry only.
+   * Serve server-rendered pages from the Vite dev server, and, with
+   * `ssr.build`, emit a Web `fetch` handler as the server bundle. When
+   * set, `vite` passes HTML navigations that fall through Vite, plus
+   * non-GET requests, to `renderPage` from the module at
+   * `ssr.serverEntry`. When `undefined` (the default), the dev server
+   * serves the client entry only.
    */
-  ssr?: Omit<FoldkitSsrOptions, 'buildId'> &
+  ssr?: Omit<FoldkitSsrOptions, 'buildId' | 'quietStandDown'> &
     Readonly<{
       /**
-       * Build the server entry alongside the browser build, and generate static
-       * HTML from it, inside this project's own `vite build`. `true` builds it
-       * with the default output directories and generates nothing.
+       * Build a Web `fetch` handler alongside the browser build, and generate
+       * static HTML from the server entry, inside this project's own
+       * `vite build`. The handler is the server bundle: Node and Workers
+       * both run it. `true` builds it with the default output directories
+       * and generates nothing.
        *
-       * When this is absent, `vite build` builds the browser bundle only and
-       * the server build is a separate command the deployment runs itself.
+       * When this is absent, `vite build` builds the browser bundle only.
        */
       build?: boolean | FoldkitBuildOptions
     }>
@@ -140,6 +144,7 @@ const FORCE_INCLUDED_EFFECT_NAMESPACES: ReadonlyArray<string> = [
   'effect/HashMap',
   'effect/HashSet',
   'effect/Layer',
+  'effect/Logger',
   'effect/Match',
   'effect/Number',
   'effect/Option',
@@ -217,7 +222,7 @@ const Event = Data.taggedEnum<Event>()
 
 type PreservedEntry = Readonly<{
   model: unknown
-  isHmrReload: boolean
+  isReloadFlush: boolean
 }>
 
 type State = Readonly<{
@@ -256,28 +261,28 @@ const makeState = Effect.gen(function* () {
   return state
 })
 
-const encodeResponseFrameJson = S.encodeUnknownSync(
-  S.fromJsonString(ResponseFrame),
+const encodeResponseFrameJson = Schema.encodeUnknownSync(
+  Schema.fromJsonString(ResponseFrame),
 )
 
 // HANDLERS
 
 const handlePreserveModelReceived = (state: State, payload: unknown) =>
-  Exit.match(S.decodeUnknownExit(PreserveModelMessage)(payload), {
+  Exit.match(Schema.decodeUnknownExit(PreserveModelMessage)(payload), {
     onFailure: error =>
       Console.warn(
-        '[foldkit:hmr] failed to decode preserve-model payload',
+        '[foldkit:preserve] failed to decode preserve-model payload',
         error,
       ),
-    onSuccess: ({ id, model, isHmrReload }) =>
+    onSuccess: ({ id, model, isReloadFlush }) =>
       Ref.update(state.preservedModels, current => {
         const existingFlag = Option.exists(
           HashMap.get(current, id),
-          ({ isHmrReload }) => isHmrReload,
+          ({ isReloadFlush }) => isReloadFlush,
         )
         const entry: PreservedEntry = {
           model,
-          isHmrReload: isHmrReload === true || existingFlag,
+          isReloadFlush: isReloadFlush === true || existingFlag,
         }
         return HashMap.set(current, id, entry)
       }),
@@ -288,10 +293,10 @@ const handleRequestModelReceived = (
   state: State,
   payload: unknown,
 ) =>
-  Exit.match(S.decodeUnknownExit(RequestModelMessage)(payload), {
+  Exit.match(Schema.decodeUnknownExit(RequestModelMessage)(payload), {
     onFailure: error =>
       Console.warn(
-        '[foldkit:hmr] failed to decode request-model payload',
+        '[foldkit:preserve] failed to decode request-model payload',
         error,
       ),
     onSuccess: ({ id }) =>
@@ -301,7 +306,7 @@ const handleRequestModelReceived = (
           Effect.sync(() =>
             server.ws.send(
               'foldkit:restore-model',
-              S.encodeUnknownSync(RestoreModelMessage)(
+              Schema.encodeUnknownSync(RestoreModelMessage)(
                 RestoreModelMessage.make({ id, model }),
               ),
             ),
@@ -309,8 +314,8 @@ const handleRequestModelReceived = (
         yield* Option.match(HashMap.get(current, id), {
           onNone: () => sendRestore(undefined),
           onSome: entry => {
-            if (entry.isHmrReload) {
-              const served: PreservedEntry = { ...entry, isHmrReload: false }
+            if (entry.isReloadFlush) {
+              const served: PreservedEntry = { ...entry, isReloadFlush: false }
               return Ref.update(
                 state.preservedModels,
                 HashMap.set(id, served),
@@ -326,7 +331,7 @@ const handleRequestModelReceived = (
 
 const handleHotUpdateFired = (state: State) =>
   Ref.update(state.preservedModels, current =>
-    HashMap.map(current, entry => ({ ...entry, isHmrReload: true })),
+    HashMap.map(current, entry => ({ ...entry, isReloadFlush: true })),
   )
 
 const handleBrowserEventFrameReceived = (
@@ -334,7 +339,7 @@ const handleBrowserEventFrameReceived = (
   data: unknown,
   client: WebSocketClient,
 ) =>
-  Exit.match(S.decodeUnknownExit(EventFrame)(data), {
+  Exit.match(Schema.decodeUnknownExit(EventFrame)(data), {
     onFailure: error =>
       Console.warn(
         '[foldkit:devTools] failed to decode browser event frame',
@@ -416,7 +421,7 @@ const handleViteClientClosed = (state: State, client: WebSocketClient) =>
   })
 
 const handleBrowserResponseFrameReceived = (state: State, data: unknown) =>
-  Exit.match(S.decodeUnknownExit(ResponseFrame)(data), {
+  Exit.match(Schema.decodeUnknownExit(ResponseFrame)(data), {
     onFailure: error =>
       Console.warn(
         '[foldkit:devTools] failed to decode browser response frame',
@@ -465,20 +470,23 @@ const handleMcpRequestReceived = (
   client: WebSocket,
   raw: string,
 ) =>
-  Exit.match(S.decodeUnknownExit(S.fromJsonString(RequestFrame))(raw), {
-    onFailure: error =>
-      Console.warn(
-        '[foldkit:devTools] failed to decode MCP request frame',
-        error,
-      ),
-    onSuccess: frame =>
-      M.value(frame.request).pipe(
-        M.tag('RequestListRuntimes', () =>
-          replyListRuntimes(state, client, frame.id),
+  Exit.match(
+    Schema.decodeUnknownExit(Schema.fromJsonString(RequestFrame))(raw),
+    {
+      onFailure: error =>
+        Console.warn(
+          '[foldkit:devTools] failed to decode MCP request frame',
+          error,
         ),
-        M.orElse(() => forwardRequestToBrowsers(server, frame)),
-      ),
-  })
+      onSuccess: frame =>
+        Match.value(frame.request).pipe(
+          Match.tag('RequestListRuntimes', () =>
+            replyListRuntimes(state, client, frame.id),
+          ),
+          Match.orElse(() => forwardRequestToBrowsers(server, frame)),
+        ),
+    },
+  )
 
 const replyListRuntimes = (
   state: State,
@@ -509,15 +517,15 @@ const forwardRequestToBrowsers = (
   Effect.sync(() =>
     server.ws.send(
       'foldkit:devTools:request',
-      S.encodeUnknownSync(RequestFrame)(frame),
+      Schema.encodeUnknownSync(RequestFrame)(frame),
     ),
   )
 
 // EVENT DISPATCH
 
 const dispatchEvent = (server: ViteDevServer, state: State, event: Event) =>
-  M.value(event).pipe(
-    M.tagsExhaustive({
+  Match.value(event).pipe(
+    Match.tagsExhaustive({
       PreserveModelReceived: ({ payload }) =>
         handlePreserveModelReceived(state, payload),
       RequestModelReceived: ({ payload }) =>
@@ -687,7 +695,7 @@ const main = (
     yield* registerViteWsHandlers(server, state, enqueue)
 
     // NOTE: Forked rather than awaited because binding the relay can retry for
-    // seconds. The HMR bridge is independent of the relay, and the runtime
+    // seconds. Model preservation is independent of the relay, and the runtime
     // gives up on its boot-time model request in well under a second, so
     // sequencing the dispatch loop behind the bind would cost model
     // preservation whenever the port is contended.
@@ -704,8 +712,8 @@ const main = (
 
 /**
  * Foldkit's Vite plugin set: the view-identity branding transform and
- * DevTools overlay injection (dev and build), plus the HMR bridge with state
- * preservation and the optional DevTools MCP relay (dev only). Returned as
+ * DevTools overlay injection (dev and build), plus Model preservation across
+ * reloads and the optional DevTools MCP relay (dev only). Returned as
  * an array; Vite flattens nested plugin arrays, so `plugins: [foldkit()]`
  * keeps working.
  */
@@ -717,15 +725,19 @@ const withContainerId = (
   containerId: string | undefined,
 ): FoldkitBuildOptions => {
   const options: FoldkitBuildOptions = build === true ? {} : build
-  if (containerId === undefined || options.prerender === undefined) {
+  if (containerId === undefined) {
     return options
+  }
+  const withContainer: FoldkitBuildOptions = { ...options, containerId }
+  if (options.prerender === undefined) {
+    return withContainer
   }
   const prerender = options.prerender === true ? {} : options.prerender
   if (prerender === false) {
-    return options
+    return withContainer
   }
   return {
-    ...options,
+    ...withContainer,
     prerender: { containerId, ...prerender },
   }
 }
@@ -750,8 +762,8 @@ export const foldkit = (options: FoldkitPluginOptions = {}): Array<Plugin> => {
       }
     })
 
-  const hmrPlugin: Plugin = {
-    name: 'foldkit-hmr',
+  const reloadPlugin: Plugin = {
+    name: 'foldkit',
     apply: 'serve',
     config: userConfig => ({
       optimizeDeps: {
@@ -794,7 +806,7 @@ export const foldkit = (options: FoldkitPluginOptions = {}): Array<Plugin> => {
     foldkitBuildToken(options.buildId),
     foldkitViewIdentity(),
     devToolsOverlayPlugin(),
-    hmrPlugin,
+    reloadPlugin,
   ]
 
   if (options.ssr === undefined) {
@@ -805,6 +817,7 @@ export const foldkit = (options: FoldkitPluginOptions = {}): Array<Plugin> => {
   const servePages = foldkitSsr({
     ...ssr,
     ...(options.buildId === undefined ? {} : { buildId: options.buildId }),
+    quietStandDown: build !== undefined && build !== false,
   })
 
   if (build === undefined || build === false) {

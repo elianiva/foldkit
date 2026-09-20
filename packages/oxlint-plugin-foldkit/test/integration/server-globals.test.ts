@@ -1,8 +1,8 @@
-import { build } from 'esbuild'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { build } from 'rolldown'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { type LintDiagnostic, runOxlint } from './run-oxlint.ts'
@@ -22,12 +22,14 @@ const consumerRuleCode = 'eslint(no-restricted-globals)'
 const patternFixtures: Record<string, string> = {
   'patterns/src/entry.server.ts': `
 export const title = document.title
+export const renderedAt = Date.now()
 `,
   'patterns/src/entry.server.tsx': `
 export const hasWindow = typeof window !== 'undefined'
 `,
   'patterns/server/main.ts': `
 export const title = globalThis.document.title
+export const generatedAt = Date.now()
 `,
   'patterns/server/view.tsx': `
 export const view = <div>{globalThis?.['navigator'].language}</div>
@@ -35,6 +37,9 @@ export const view = <div>{globalThis?.['navigator'].language}</div>
   'patterns/scripts/prerender.ts': `
 const { localStorage: storage } = globalThis
 export const theme = storage.getItem('theme')
+`,
+  'patterns/scripts/prerender.tsx': `
+export const page = <div>{document.title}{Date.now()}</div>
 `,
 }
 
@@ -64,6 +69,7 @@ export const fetchPage = async (request: Request): Promise<Response> => {
 `,
   'valid/src/entry.client.ts': `
 export const title = document.title + globalThis.document.title
+export const startedAt = performance.now()
 `,
 }
 
@@ -78,7 +84,7 @@ export const title = (): string => {
 console.log(document.title)
 `,
   'composition/server/policy.test.ts': `
-console.log(document.title)
+console.log(document.title, Math.random())
 `,
   'composition/server/policy.spec.tsx': `
 console.log(<div>{document.title}</div>)
@@ -115,11 +121,9 @@ const codesFor = (
 
 beforeAll(async () => {
   await build({
-    entryPoints: [join(pluginRoot, 'src', 'index.ts')],
-    bundle: true,
+    input: join(pluginRoot, 'src', 'index.ts'),
     platform: 'node',
-    format: 'esm',
-    outfile: bundlePath,
+    output: { file: bundlePath, format: 'esm' },
   })
 
   const { default: plugin } = await import(pathToFileURL(bundlePath).href)

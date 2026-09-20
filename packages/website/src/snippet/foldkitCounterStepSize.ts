@@ -1,17 +1,17 @@
-import { Duration, Effect, Schema as S, Stream } from 'effect'
+import { Duration, Effect, Schema, Stream } from 'effect'
 import { Subscription, type Update } from 'foldkit'
 import type { Document, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 const TICK_INTERVAL_MS = 1000
 
 // MODEL
 
-const Model = S.Struct({
-  count: S.Number,
-  step: S.Number,
-  isAutoCounting: S.Boolean,
+const Model = Schema.Struct({
+  count: Schema.Number,
+  step: Schema.Number,
+  isAutoCounting: Schema.Boolean,
 })
 type Model = typeof Model.Type
 
@@ -20,7 +20,7 @@ type Model = typeof Model.Type
 const Message = defineMessageUnion({
   ClickedIncrement: {},
   ClickedToggleAutoCount: {},
-  ChangedStep: { step: S.Number },
+  ChangedStep: { step: Schema.Number },
   Ticked: {},
 })
 type Message = typeof Message.Type
@@ -29,7 +29,7 @@ type Message = typeof Message.Type
 
 const subscriptions = Subscription.make<Model, Message>()(entry => ({
   tick: entry(
-    { isAutoCounting: S.Boolean },
+    { isAutoCounting: Schema.Boolean },
     {
       modelToDependencies: model => ({
         isAutoCounting: model.isAutoCounting,
@@ -50,16 +50,18 @@ const subscriptions = Subscription.make<Model, Message>()(entry => ({
 const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedIncrement: () => ({
-      model: evo(model, { count: count => count + model.step }),
+      model: modifyFields(model, { count: count => count + model.step }),
     }),
     ClickedToggleAutoCount: () => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         isAutoCounting: isAutoCounting => !isAutoCounting,
       }),
     }),
-    ChangedStep: ({ step }) => ({ model: evo(model, { step: () => step }) }),
+    ChangedStep: ({ step }) => ({
+      model: modifyFields(model, { step: () => step }),
+    }),
     Ticked: () => ({
-      model: evo(model, { count: count => count + model.step }),
+      model: modifyFields(model, { count: count => count + model.step }),
     }),
   })
 

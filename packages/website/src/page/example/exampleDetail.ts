@@ -1,64 +1,27 @@
-import {
-  Array,
-  Effect,
-  Match as M,
-  Option,
-  Queue,
-  Schema as S,
-  Stream,
-  pipe,
-} from 'effect'
+import { Array, Effect, Option, Queue, Schema, Stream, pipe } from 'effect'
 import { AsyncData, Command, Mount, Submodel, Update } from 'foldkit'
 import { Html, type HtmlBuilder, inertHtml as ih } from 'foldkit/html'
-import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Disclosure, Tabs } from '@foldkit/ui'
 
+import { CodeBlock } from '../../component'
 import { Icon } from '../../icon'
 import { exampleSourceHref } from '../../link'
-import type { TableOfContentsEntry } from '../../main'
 import { pageTitle, para } from '../../prose'
 import { examplesRouter, playgroundRouter } from '../../route'
-import {
-  type RenderCopyButton,
-  highlightedCodeBlockFor,
-} from '../../view/codeBlock'
+import type { TableOfContentsEntry } from '../../tableOfContentsEntry'
+import { Message } from './message'
 import { type ExampleMeta, findBySlug } from './meta'
+import { CurrentSourcesAsyncData, type Model } from './model'
 import {
   type ExampleSourceFile,
   ExampleSources,
   loadSourcesForSlug,
 } from './sources'
 
-// MODEL
-
-export const CurrentSourcesAsyncData = AsyncData.Schema(
-  ExampleSources,
-  S.String,
-)
-
-export const Model = S.Struct({
-  sourceFileTabs: Tabs.Model,
-  maybeActiveSourceFilePath: S.Option(S.String),
-  maybeExampleUrl: S.Option(S.String),
-  isLivePreviewOpen: S.Boolean,
-  currentSources: CurrentSourcesAsyncData.schema,
-})
-export type Model = typeof Model.Type
-
-// MESSAGE
-
-export const Message = defineMessageUnion({
-  GotSourceFileTabsMessage: { message: Tabs.Message },
-  ChangedExampleUrl: { url: S.String },
-  ToggledLivePreview: { isOpen: S.Boolean },
-  RequestedExampleSources: { slug: S.String },
-  SucceededLoadExampleSources: { sources: ExampleSources },
-  FailedLoadExampleSources: { error: S.String },
-})
-
-export type Message = typeof Message.Type
+export { Message } from './message'
+export { CurrentSourcesAsyncData, Model } from './model'
 
 // COMMAND
 
@@ -66,7 +29,7 @@ export type Message = typeof Message.Type
  *  loaded sources on success or a failure Message when the fetch does not
  *  complete. */
 export const LoadExampleSources = Command.define('LoadExampleSources', {
-  args: { slug: S.String },
+  args: { slug: Schema.String },
   messages: [
     Message.SucceededLoadExampleSources,
     Message.FailedLoadExampleSources,
@@ -180,14 +143,14 @@ export const update = (model: Model, message: Message) =>
     GotSourceFileTabsMessage: ({ message }) =>
       foldSourceFileTabs(model, message),
     ChangedExampleUrl: ({ url }) => ({
-      model: evo(model, { maybeExampleUrl: () => Option.some(url) }),
+      model: modifyFields(model, { maybeExampleUrl: () => Option.some(url) }),
     }),
     ToggledLivePreview: ({ isOpen }) => ({
-      model: evo(model, { isLivePreviewOpen: () => isOpen }),
+      model: modifyFields(model, { isLivePreviewOpen: () => isOpen }),
     }),
 
     RequestedExampleSources: ({ slug }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         sourceFileTabs: () => Tabs.init({ id: 'source-file-tabs' }),
         maybeActiveSourceFilePath: () => Option.none(),
         maybeExampleUrl: () => Option.none(),
@@ -197,7 +160,7 @@ export const update = (model: Model, message: Message) =>
     }),
 
     SucceededLoadExampleSources: ({ sources }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         maybeActiveSourceFilePath: () =>
           pipe(
             sources.files,
@@ -210,7 +173,7 @@ export const update = (model: Model, message: Message) =>
     }),
 
     FailedLoadExampleSources: ({ error }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         currentSources: () => CurrentSourcesAsyncData.Failure({ error }),
       }),
     }),
@@ -231,31 +194,16 @@ const featureTag = (text: string): Html =>
     [text],
   )
 
-const chromeRecommendedHint = (): Html =>
-  ih.p(
-    [ih.Class('text-xs text-gray-500 dark:text-gray-400')],
-    ['Requires a Chromium browser'],
-  )
-
-const launchPlaygroundSection = (
-  meta: ExampleMeta,
-  isShowingChromeHint: boolean,
-): Html =>
-  ih.div(
-    [ih.Class('flex flex-col items-start gap-1')],
+const launchPlaygroundLink = (meta: ExampleMeta): Html =>
+  ih.a(
     [
-      ih.a(
-        [
-          ih.Href(playgroundRouter({ exampleSlug: meta.slug })),
-          ih.Class('cta-amber-sm'),
-        ],
-        [Icon.bolt('w-4 h-4'), 'Launch Playground'],
-      ),
-      ...(isShowingChromeHint ? [chromeRecommendedHint()] : []),
+      ih.Href(playgroundRouter({ exampleSlug: meta.slug })),
+      ih.Class('cta-amber-sm'),
     ],
+    [Icon.bolt('w-4 h-4'), 'Launch Playground'],
   )
 
-const headerView = (meta: ExampleMeta, isShowingChromeHint: boolean): Html =>
+const headerView = (meta: ExampleMeta): Html =>
   ih.div(
     [ih.Class('mb-6')],
     [
@@ -277,13 +225,11 @@ const headerView = (meta: ExampleMeta, isShowingChromeHint: boolean): Html =>
       ih.div(
         [ih.Class('flex flex-col items-start gap-3 mt-3')],
         [
-          launchPlaygroundSection(meta, isShowingChromeHint),
+          launchPlaygroundLink(meta),
           ih.a(
             [
               ih.Href(exampleSourceHref(meta.slug)),
-              ih.Class(
-                'text-sm text-accent-600 dark:text-accent-500 underline decoration-accent-600/30 dark:decoration-accent-500/30 hover:decoration-accent-600 dark:hover:decoration-accent-500',
-              ),
+              ih.Class('link-accent text-sm'),
             ],
             ['View source on GitHub'],
           ),
@@ -417,24 +363,23 @@ const livePreviewDisclosureView = (
 
 const SourceFileTabs = Tabs.create()
 
-const foldSourceFileTabsOutMessage = M.type<Tabs.OutMessage>().pipe(
-  M.withReturnType<Update.Step<Model, Message>>(),
-  M.tagsExhaustive({
-    Selected:
-      ({ value }) =>
-      model => ({
-        model: evo(model, {
-          maybeActiveSourceFilePath: () => Option.some(value),
-        }),
+const foldSourceFileTabsOutMessage = Tabs.OutMessage.match<
+  Update.Step<Model, Message>
+>({
+  Selected:
+    ({ value }) =>
+    model => ({
+      model: modifyFields(model, {
+        maybeActiveSourceFilePath: () => Option.some(value),
       }),
-  }),
-)
+    }),
+})
 
 const foldSourceFileTabs = Update.foldChild({
   update: SourceFileTabs.update,
   read: (model: Model) => Option.some(model.sourceFileTabs),
   write: (model, nextSourceFileTabs) =>
-    evo(model, { sourceFileTabs: () => nextSourceFileTabs }),
+    modifyFields(model, { sourceFileTabs: () => nextSourceFileTabs }),
   toParentMessage: message => Message.GotSourceFileTabsMessage({ message }),
   foldOutMessage: foldSourceFileTabsOutMessage,
 })
@@ -451,14 +396,15 @@ const TAB_BUTTON_INACTIVE =
   ' text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/50 dark:hover:bg-gray-800/50'
 
 const sourceCodeView = (
+  exampleSlug: string,
   files: ReadonlyArray<ExampleSourceFile>,
   tabsModel: Tabs.Model,
   activeSourceFilePath: string,
   isNarrowViewport: boolean,
-  renderCopyButton: RenderCopyButton,
+  renderCopyButton: CodeBlock.RenderCopyButton,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const highlightedCodeBlock = highlightedCodeBlockFor(renderCopyButton)
+  const highlightedView = CodeBlock.highlightedViewFor(renderCopyButton)
 
   const filePaths = Array.map(files, file => file.path)
 
@@ -514,7 +460,8 @@ const sourceCodeView = (
                         h.div(
                           [h.Class('code-embed-scroll')],
                           [
-                            highlightedCodeBlock(
+                            highlightedView(
+                              `example-${exampleSlug}-source-${file.path}`,
                               h.div([
                                 h.Class('code-embed'),
                                 h.InnerHTML(file.highlightedHtml),
@@ -608,8 +555,7 @@ const sourcesFailureView = (error: string): Html =>
 type ViewInputs = Readonly<{
   slug: string
   isNarrowViewport: boolean
-  isShowingChromeHint: boolean
-  renderCopyButton: RenderCopyButton
+  renderCopyButton: CodeBlock.RenderCopyButton
 }>
 
 /**
@@ -617,17 +563,13 @@ type ViewInputs = Readonly<{
  * behind a Tabs Submodel.
  *
  * The page is dispatched through `h.submodel`, so it takes `renderCopyButton`
- * from its parent rather than building the copy control itself. The control
- * carries an app-level Message, and a handler's dispatcher comes from the frame
- * the element is built in, so one built here would be rejected by this
- * Submodel's `toParentMessage`.
+ * from its parent rather than building the SnippetCopy boundary itself. The
+ * renderer runs in the parent's boundary, so the nested Submodel's Message is
+ * wrapped for the parent instead of being rejected by this page's
+ * `toParentMessage`.
  */
 export const view = Submodel.defineView<Model, Message, ViewInputs>(
-  (
-    model,
-    { slug, isNarrowViewport, isShowingChromeHint, renderCopyButton },
-    h,
-  ): Html =>
+  (model, { slug, isNarrowViewport, renderCopyButton }, h): Html =>
     Option.match(findBySlug(slug), {
       onNone: () => h.div([], ['Example not found']),
       onSome: meta =>
@@ -635,7 +577,7 @@ export const view = Submodel.defineView<Model, Message, ViewInputs>(
           slug,
           [],
           [
-            headerView(meta, isShowingChromeHint),
+            headerView(meta),
             meta.livePreview === 'PlaygroundOnly'
               ? playgroundOnlyNotice(meta)
               : livePreviewDisclosureView(
@@ -658,6 +600,7 @@ export const view = Submodel.defineView<Model, Message, ViewInputs>(
                         onEmpty: () => [],
                         onNonEmpty: files => [
                           sourceCodeView(
+                            slug,
                             files,
                             model.sourceFileTabs,
                             Option.getOrElse(

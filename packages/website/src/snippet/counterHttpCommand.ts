@@ -1,16 +1,16 @@
-import { Effect, Schema as S } from 'effect'
+import { Effect, Schema } from 'effect'
 import { HttpClient, HttpClientRequest } from 'effect/unstable/http'
 import { Command, Http, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 const Message = defineMessageUnion({
   ClickedFetchCount: {},
-  SucceededFetchCount: { count: S.Number },
-  FailedFetchCount: { error: S.String },
+  SucceededFetchCount: { count: Schema.Number },
+  FailedFetchCount: { error: Schema.String },
 })
 
-const CountResponse = S.Struct({ count: S.Number })
+const CountResponse = Schema.Struct({ count: Schema.Number })
 
 const FetchCount = Command.define('FetchCount', {
   messages: [Message.SucceededFetchCount, Message.FailedFetchCount],
@@ -22,7 +22,7 @@ const FetchCount = Command.define('FetchCount', {
       return yield* Effect.fail('API request failed')
     }
 
-    const { count } = yield* S.decodeUnknownEffect(CountResponse)(
+    const { count } = yield* Schema.decodeUnknownEffect(CountResponse)(
       yield* response.json,
     )
     return Message.SucceededFetchCount({ count })
@@ -38,7 +38,7 @@ const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedFetchCount: () => ({ model, commands: [FetchCount()] }),
     SucceededFetchCount: ({ count }) => ({
-      model: evo(model, { count: () => count }),
+      model: modifyFields(model, { count: () => count }),
     }),
     FailedFetchCount: () => ({ model }),
   })

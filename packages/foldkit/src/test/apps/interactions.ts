@@ -1,18 +1,18 @@
-import { Number, Schema as S } from 'effect'
+import { Number, Schema } from 'effect'
 
 import type { Html, HtmlBuilder } from '../../html/index.js'
 import { defineMessageUnion } from '../../message/index.js'
-import { evo } from '../../struct/index.js'
+import { modifyFields } from '../../struct/index.js'
 import type * as Update from '../../update/index.js'
 
 // MODEL
 
-export const Model = S.Struct({
-  clicks: S.Number,
-  doubleClicks: S.Number,
-  hovered: S.Boolean,
-  focused: S.Boolean,
-  changed: S.String,
+export const Model = Schema.Struct({
+  clicks: Schema.Number,
+  doubleClicks: Schema.Number,
+  hovered: Schema.Boolean,
+  focused: Schema.Boolean,
+  changed: Schema.String,
 })
 export type Model = typeof Model.Type
 
@@ -24,7 +24,7 @@ export const Message = defineMessageUnion({
   HoveredTarget: {},
   FocusedInput: {},
   BlurredInput: {},
-  ChangedSelect: { value: S.String },
+  ChangedSelect: { value: Schema.String },
 })
 
 export type Message = typeof Message.Type
@@ -44,22 +44,22 @@ export const initialModel: Model = {
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedButton: () => ({
-      model: evo(model, { clicks: Number.increment }),
+      model: modifyFields(model, { clicks: Number.increment }),
     }),
     DoubleClickedButton: () => ({
-      model: evo(model, { doubleClicks: Number.increment }),
+      model: modifyFields(model, { doubleClicks: Number.increment }),
     }),
     HoveredTarget: () => ({
-      model: evo(model, { hovered: () => true }),
+      model: modifyFields(model, { hovered: () => true }),
     }),
     FocusedInput: () => ({
-      model: evo(model, { focused: () => true }),
+      model: modifyFields(model, { focused: () => true }),
     }),
     BlurredInput: () => ({
-      model: evo(model, { focused: () => false }),
+      model: modifyFields(model, { focused: () => false }),
     }),
     ChangedSelect: ({ value }) => ({
-      model: evo(model, { changed: () => value }),
+      model: modifyFields(model, { changed: () => value }),
     }),
   })
 

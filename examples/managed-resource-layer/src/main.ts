@@ -3,16 +3,16 @@ import {
   Crypto,
   Effect,
   Layer,
-  Match as M,
+  Match,
   Number,
   Option,
-  Schema as S,
+  Schema,
 } from 'effect'
 import { Command, ManagedResource, Runtime, type Update } from 'foldkit'
 import { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { BrowserCrypto } from '@effect/platform-browser'
 import { Button } from '@foldkit/ui'
@@ -50,15 +50,15 @@ type EngineService = ManagedResource.ServiceOf<typeof Engine>
 export const EngineState = defineTaggedUnion({
   Off: {},
   Booting: {},
-  Ready: { engineId: S.String },
-  Failed: { reason: S.String },
+  Ready: { engineId: Schema.String },
+  Failed: { reason: Schema.String },
 })
 type EngineState = typeof EngineState.Type
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   engine: EngineState,
-  computeCount: S.Number,
-  maybeSquareResult: S.Option(S.Number),
+  computeCount: Schema.Number,
+  maybeSquareResult: Schema.Option(Schema.Number),
 })
 export type Model = typeof Model.Type
 
@@ -67,11 +67,11 @@ export type Model = typeof Model.Type
 export const Message = defineMessageUnion({
   ClickedStartEngine: {},
   ClickedStopEngine: {},
-  StartedEngine: { engineId: S.String },
+  StartedEngine: { engineId: Schema.String },
   StoppedEngine: {},
-  FailedStartEngine: { reason: S.String },
+  FailedStartEngine: { reason: Schema.String },
   ClickedCompute: {},
-  CompletedCompute: { result: S.Number },
+  CompletedCompute: { result: Schema.Number },
   SkippedCompute: {},
 })
 
@@ -80,7 +80,7 @@ export type Message = typeof Message.Type
 // COMMAND
 
 export const Compute = Command.define('Compute', {
-  args: { value: S.Number },
+  args: { value: Schema.Number },
   messages: [Message.CompletedCompute, Message.SkippedCompute],
   execute: ({ value }) =>
     Effect.gen(function* () {
@@ -98,15 +98,15 @@ export const Compute = Command.define('Compute', {
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, EngineService>>(message, {
     ClickedStartEngine: () => ({
-      model: evo(model, { engine: () => EngineState.Booting() }),
+      model: modifyFields(model, { engine: () => EngineState.Booting() }),
     }),
 
     ClickedStopEngine: () => ({
-      model: evo(model, { engine: () => EngineState.Off() }),
+      model: modifyFields(model, { engine: () => EngineState.Off() }),
     }),
 
     StartedEngine: ({ engineId }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         engine: () => EngineState.Ready({ engineId }),
       }),
     }),
@@ -114,19 +114,23 @@ export const update = (model: Model, message: Message) =>
     StoppedEngine: () => ({ model }),
 
     FailedStartEngine: ({ reason }) => ({
-      model: evo(model, { engine: () => EngineState.Failed({ reason }) }),
+      model: modifyFields(model, {
+        engine: () => EngineState.Failed({ reason }),
+      }),
     }),
 
     ClickedCompute: () => {
       const nextComputeCount = Number.increment(model.computeCount)
       return {
-        model: evo(model, { computeCount: () => nextComputeCount }),
+        model: modifyFields(model, { computeCount: () => nextComputeCount }),
         commands: [Compute({ value: nextComputeCount })],
       }
     },
 
     CompletedCompute: ({ result }) => ({
-      model: evo(model, { maybeSquareResult: () => Option.some(result) }),
+      model: modifyFields(model, {
+        maybeSquareResult: () => Option.some(result),
+      }),
     }),
 
     SkippedCompute: () => ({ model }),
@@ -146,13 +150,13 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
 
 export const managedResources = ManagedResource.make<Model, Message>()(
   entry => ({
-    engine: entry(S.Option(S.Null), {
+    engine: entry(Schema.Option(Schema.Null), {
       resource: Engine,
       modelToMaybeRequirements: model =>
-        M.value(model.engine).pipe(
-          M.tag('Booting', 'Ready', () => Option.some(null)),
-          M.tag('Off', 'Failed', () => Option.none()),
-          M.exhaustive,
+        Match.value(model.engine).pipe(
+          Match.tag('Booting', 'Ready', () => Option.some(null)),
+          Match.tag('Off', 'Failed', () => Option.none()),
+          Match.exhaustive,
         ),
       acquire: () =>
         Layer.build(engineLayer).pipe(
@@ -225,18 +229,18 @@ const engineControlsView = (
   engine: EngineState,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const controls = M.value(engine).pipe(
-    M.tag('Booting', 'Ready', () => ({
+  const controls = Match.value(engine).pipe(
+    Match.tag('Booting', 'Ready', () => ({
       label: 'Stop engine',
       message: Message.ClickedStopEngine(),
       colorClassName: 'bg-red-500 hover:bg-red-600',
     })),
-    M.tag('Off', 'Failed', () => ({
+    Match.tag('Off', 'Failed', () => ({
       label: 'Start engine',
       message: Message.ClickedStartEngine(),
       colorClassName: 'bg-green-500 hover:bg-green-600',
     })),
-    M.exhaustive,
+    Match.exhaustive,
   )
 
   return h.div(

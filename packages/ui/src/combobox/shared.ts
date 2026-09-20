@@ -1,18 +1,10 @@
-import {
-  Array,
-  Effect,
-  Match as M,
-  Option,
-  Predicate,
-  Schema as S,
-  pipe,
-} from 'effect'
+import { Array, Effect, Match, Option, Predicate, Schema, pipe } from 'effect'
 import * as Command from 'foldkit/command'
 import * as Dom from 'foldkit/dom'
 import type { ChildAttribute, Html } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import * as Mount from 'foldkit/mount'
-import { makeConstrainedEvo } from 'foldkit/struct'
+import { makeModifyFieldsFor } from 'foldkit/struct'
 import { type View as SubmodelView, defineView } from 'foldkit/submodel'
 import * as Update from 'foldkit/update'
 
@@ -24,13 +16,12 @@ import {
 // NOTE: Animation imports are split across schema + update to avoid a circular
 // dependency: animation → html → runtime → devtools → combobox → animation.
 // The barrel (../animation) imports from html, which starts the cycle.
+import * as Animation from '../animation/schema.js'
 import {
-  Message as AnimationMessage,
-  Model as AnimationModel,
-  type OutMessage as AnimationOutMessage,
-  init as animationInit,
-} from '../animation/schema.js'
-import { update as animationUpdate } from '../animation/update.js'
+  hide as animationHide,
+  show as animationShow,
+  update as animationUpdate,
+} from '../animation/update.js'
 import { groupContiguous } from '../group.js'
 import * as OptionExt from '../internal/optionExtensions.js'
 import { idSelector } from '../internal/selectors.js'
@@ -41,24 +32,24 @@ export { groupContiguous }
 // MODEL
 
 /** Schema for the activation trigger: whether the user interacted via mouse or keyboard. */
-export const ActivationTrigger = S.Literals(['Pointer', 'Keyboard'])
+export const ActivationTrigger = Schema.Literals(['Pointer', 'Keyboard'])
 export type ActivationTrigger = typeof ActivationTrigger.Type
 
-/** Schema fields shared by all combobox variants (single-select and multi-select). Spread into each variant's `S.Struct` to avoid duplicating field definitions. */
-export const BaseModel = S.Struct({
-  id: S.String,
-  isOpen: S.Boolean,
-  isAnimated: S.Boolean,
-  isModal: S.Boolean,
-  nullable: S.Boolean,
-  immediate: S.Boolean,
-  selectInputOnFocus: S.Boolean,
-  animation: AnimationModel,
-  maybeActiveItemIndex: S.Option(S.Number),
+/** Schema fields shared by all combobox variants (single-select and multi-select). Spread into each variant's `Schema.Struct` to avoid duplicating field definitions. */
+export const BaseModel = Schema.Struct({
+  id: Schema.String,
+  isOpen: Schema.Boolean,
+  isAnimated: Schema.Boolean,
+  isModal: Schema.Boolean,
+  nullable: Schema.Boolean,
+  immediate: Schema.Boolean,
+  selectInputOnFocus: Schema.Boolean,
+  animation: Animation.Model,
+  maybeActiveItemIndex: Schema.Option(Schema.Number),
   activationTrigger: ActivationTrigger,
-  inputValue: S.String,
-  maybeLastPointerPosition: S.Option(
-    S.Struct({ screenX: S.Number, screenY: S.Number }),
+  inputValue: Schema.String,
+  maybeLastPointerPosition: Schema.Option(
+    Schema.Struct({ screenX: Schema.Number, screenY: Schema.Number }),
   ),
 })
 export type BaseModel = typeof BaseModel.Type
@@ -87,7 +78,7 @@ export const baseInit = (config: BaseInitConfig): BaseModel => ({
   nullable: config.nullable ?? false,
   immediate: config.immediate ?? false,
   selectInputOnFocus: config.selectInputOnFocus ?? false,
-  animation: animationInit({ id: `${config.id}-items` }),
+  animation: Animation.init({ id: `${config.id}-items` }),
   maybeActiveItemIndex: Option.none(),
   activationTrigger: 'Keyboard',
   inputValue: '',
@@ -98,33 +89,36 @@ export const baseInit = (config: BaseInitConfig): BaseModel => ({
 
 /** Union of all messages the combobox component can produce. */
 export const Message = defineMessageUnion({
-  Opened: { maybeActiveItemIndex: S.Option(S.Number) },
+  Opened: { maybeActiveItemIndex: Schema.Option(Schema.Number) },
   Closed: {
-    restingInputValue: S.String,
-    isClearable: S.Boolean,
+    restingInputValue: Schema.String,
+    isClearable: Schema.Boolean,
   },
   BlurredInput: {
-    restingInputValue: S.String,
-    isClearable: S.Boolean,
+    restingInputValue: Schema.String,
+    isClearable: Schema.Boolean,
   },
   ActivatedItem: {
-    index: S.Number,
+    index: Schema.Number,
     activationTrigger: ActivationTrigger,
-    maybeImmediateSelection: S.Option(S.Struct({ item: S.String })),
+    maybeImmediateSelection: Schema.Option(
+      Schema.Struct({ item: Schema.String }),
+    ),
   },
   DeactivatedItem: {},
   SelectedItem: {
-    item: S.String,
-    displayText: S.String,
-    wasSelected: S.Boolean,
+    item: Schema.String,
+    displayText: Schema.String,
+    wasSelected: Schema.Boolean,
   },
   MovedPointerOverItem: {
-    index: S.Number,
-    screenX: S.Number,
-    screenY: S.Number,
+    index: Schema.Number,
+    screenX: Schema.Number,
+    screenY: Schema.Number,
   },
-  RequestedItemClick: { index: S.Number },
+  RequestedItemClick: { index: Schema.Number },
   SuppressedItemCommit: {},
+  SuppressedEmptyItemNavigation: {},
   CompletedLockScroll: {},
   CompletedUnlockScroll: {},
   CompletedInertOthers: {},
@@ -136,11 +130,11 @@ export const Message = defineMessageUnion({
   CompletedAttachComboboxPreventBlur: {},
   CompletedAttachComboboxSelectOnFocus: {},
   CompletedPortalComboboxBackdrop: {},
-  GotAnimationMessage: { message: AnimationMessage },
-  UpdatedInputValue: { value: S.String },
+  GotAnimationMessage: { message: Animation.Message },
+  UpdatedInputValue: { value: Schema.String },
   PressedToggleButton: {
-    restingInputValue: S.String,
-    isClearable: S.Boolean,
+    restingInputValue: Schema.String,
+    isClearable: Schema.Boolean,
   },
 })
 
@@ -153,6 +147,8 @@ export type SelectedItem = typeof Message.SelectedItem.Type
 export type MovedPointerOverItem = typeof Message.MovedPointerOverItem.Type
 export type RequestedItemClick = typeof Message.RequestedItemClick.Type
 export type SuppressedItemCommit = typeof Message.SuppressedItemCommit.Type
+export type SuppressedEmptyItemNavigation =
+  typeof Message.SuppressedEmptyItemNavigation.Type
 export type CompletedLockScroll = typeof Message.CompletedLockScroll.Type
 export type CompletedUnlockScroll = typeof Message.CompletedUnlockScroll.Type
 export type CompletedInertOthers = typeof Message.CompletedInertOthers.Type
@@ -177,7 +173,7 @@ export type ClearedSelection = typeof OutMessage.ClearedSelection.Type
 
 /** Union of out-messages the combobox component can produce. The parent folds `Selected` into the selection it owns and clears that selection on `ClearedSelection`. */
 export const OutMessage = defineMessageUnion({
-  Selected: { value: S.String },
+  Selected: { value: Schema.String },
   ClearedSelection: {},
 })
 
@@ -186,7 +182,8 @@ export const OutMessage = defineMessageUnion({
  *  `Selected` OutMessage from the factory's `update`, instead of
  *  `value: string`. Defaults to `string`. */
 export type OutMessage<Value extends string = string> =
-  Selected<Value> | ClearedSelection
+  | Selected<Value>
+  | ClearedSelection
 
 // SELECTORS
 
@@ -201,6 +198,7 @@ export const inputSelector = (id: string): string => idSelector(`${id}-input`)
 export const inputWrapperSelector = (id: string): string =>
   idSelector(`${id}-input-wrapper`)
 export const itemsSelector = (id: string): string => idSelector(`${id}-items`)
+const backdropSelector = (id: string): string => idSelector(`${id}-backdrop`)
 export const itemSelector = (id: string, index: number): string =>
   idSelector(`${id}-item-${index}`)
 export const itemId = (id: string, index: number): string =>
@@ -208,11 +206,11 @@ export const itemId = (id: string, index: number): string =>
 
 // HELPERS
 
-const constrainedEvo = makeConstrainedEvo<BaseModel>()
+const modifyBaseFields = makeModifyFieldsFor<BaseModel>()
 
 /** Resets only shared base fields to their closed state. Does not touch inputValue. That is variant-specific. */
 export const closedBaseModel = <Model extends BaseModel>(model: Model): Model =>
-  constrainedEvo(model, {
+  modifyBaseFields(model, {
     isOpen: () => false,
     maybeActiveItemIndex: () => Option.none(),
     activationTrigger: () => 'Keyboard' as const,
@@ -245,23 +243,25 @@ export const UnlockScroll = Command.define('UnlockScroll', {
 })
 /** Marks all elements outside the combobox as inert for modal behavior. */
 export const InertOthers = Command.define('InertOthers', {
-  args: { id: S.String },
+  args: { id: Schema.String },
   messages: [Message.CompletedInertOthers],
   execute: ({ id }) =>
-    Dom.inertOthers(id, [inputWrapperSelector(id), itemsSelector(id)]).pipe(
-      Effect.as(Message.CompletedInertOthers()),
-    ),
+    Dom.inertOthers(id, [
+      inputWrapperSelector(id),
+      itemsSelector(id),
+      backdropSelector(id),
+    ]).pipe(Effect.as(Message.CompletedInertOthers())),
 })
 /** Removes the inert attribute from elements outside the combobox. */
 export const RestoreInert = Command.define('RestoreInert', {
-  args: { id: S.String },
+  args: { id: Schema.String },
   messages: [Message.CompletedRestoreInert],
   execute: ({ id }) =>
     Dom.restoreInert(id).pipe(Effect.as(Message.CompletedRestoreInert())),
 })
 /** Moves focus to the combobox input after selection or close. */
 export const FocusInput = Command.define('FocusInput', {
-  args: { id: S.String },
+  args: { id: Schema.String },
   messages: [Message.CompletedFocusInput],
   execute: ({ id }) =>
     Dom.focus(inputSelector(id)).pipe(
@@ -271,7 +271,7 @@ export const FocusInput = Command.define('FocusInput', {
 })
 /** Scrolls the active combobox item into view after keyboard navigation. */
 export const ScrollIntoView = Command.define('ScrollIntoView', {
-  args: { id: S.String, index: S.Number },
+  args: { id: Schema.String, index: Schema.Number },
   messages: [Message.CompletedScrollIntoView],
   execute: ({ id, index }) =>
     Dom.scrollIntoView(itemSelector(id, index)).pipe(
@@ -281,7 +281,7 @@ export const ScrollIntoView = Command.define('ScrollIntoView', {
 })
 /** Programmatically clicks the active combobox item's DOM element. */
 export const ClickItem = Command.define('ClickItem', {
-  args: { id: S.String, index: S.Number },
+  args: { id: Schema.String, index: Schema.Number },
   messages: [Message.CompletedClickItem],
   execute: ({ id, index }) =>
     Dom.clickElement(itemSelector(id, index)).pipe(
@@ -293,21 +293,21 @@ export const ClickItem = Command.define('ClickItem', {
 export const DetectMovementOrAnimationEnd = Command.define(
   'DetectMovementOrAnimationEnd',
   {
-    args: { id: S.String },
+    args: { id: Schema.String },
     messages: [Message.GotAnimationMessage],
     execute: ({ id }) =>
       Effect.raceFirst(
         Dom.detectElementMovement(inputWrapperSelector(id)).pipe(
           Effect.as(
             Message.GotAnimationMessage({
-              message: AnimationMessage.EndedAnimation(),
+              message: Animation.Message.EndedAnimation(),
             }),
           ),
         ),
         Dom.waitForAnimationSettled(itemsSelector(id)).pipe(
           Effect.as(
             Message.GotAnimationMessage({
-              message: AnimationMessage.EndedAnimation(),
+              message: Animation.Message.EndedAnimation(),
             }),
           ),
         ),
@@ -339,24 +339,39 @@ export const makeUpdate = <Model extends BaseModel>(
   type PlainUpdateReturn = Update.Return<Model, Message>
   type UpdateReturn = Update.ReturnWithOutMessage<Model, Message, OutMessage>
 
-  const foldAnimationOutMessage = M.type<AnimationOutMessage>().pipe(
-    M.withReturnType<Update.Step<Model, Message>>(),
-    M.tagsExhaustive({
-      StartedLeaveAnimating: () => model => ({
-        model,
-        commands: [DetectMovementOrAnimationEnd({ id: model.id })],
-      }),
-      TransitionedOut: () => model => ({ model }),
+  const foldAnimationOutMessage = Animation.OutMessage.match<
+    Update.Step<Model, Message>
+  >({
+    StartedLeaveAnimating: () => model => ({
+      model,
+      commands: [DetectMovementOrAnimationEnd({ id: model.id })],
     }),
-  )
+    TransitionedOut: () => model => ({ model }),
+  })
 
   const foldAnimation = Update.foldChild({
     update: animationUpdate,
     read: (model: Model) => Option.some(model.animation),
     write: (model, nextAnimation) =>
-      constrainedEvo(model, { animation: () => nextAnimation }),
+      modifyBaseFields(model, { animation: () => nextAnimation }),
     toParentMessage: message => Message.GotAnimationMessage({ message }),
     foldOutMessage: foldAnimationOutMessage,
+  })
+
+  const foldAnimationShow = Update.foldChildStep({
+    update: animationShow,
+    read: (model: Model) => Option.some(model.animation),
+    write: (model, nextAnimation) =>
+      modifyBaseFields(model, { animation: () => nextAnimation }),
+    toParentMessage: message => Message.GotAnimationMessage({ message }),
+  })
+
+  const foldAnimationHide = Update.foldChildStep({
+    update: animationHide,
+    read: (model: Model) => Option.some(model.animation),
+    write: (model, nextAnimation) =>
+      modifyBaseFields(model, { animation: () => nextAnimation }),
+    toParentMessage: message => Message.GotAnimationMessage({ message }),
   })
 
   const internalUpdate = (model: Model, message: Message): UpdateReturn => {
@@ -395,7 +410,7 @@ export const makeUpdate = <Model extends BaseModel>(
           nextModel,
           Update.combine([
             stepModel => ({ model: stepModel, commands }),
-            foldAnimation(AnimationMessage.Hid()),
+            foldAnimationHide,
           ]),
           Update.withOutMessage(outMessage),
         )
@@ -411,15 +426,15 @@ export const makeUpdate = <Model extends BaseModel>(
             model: stepModel,
             commands: Array.getSomes([maybeLockScroll, maybeInertOthers]),
           }),
-          foldAnimation(AnimationMessage.Showed()),
+          foldAnimationShow,
           stepModel => ({
-            model: constrainedEvo(stepModel, { isOpen: () => true }),
+            model: modifyBaseFields(stepModel, { isOpen: () => true }),
           }),
         ])
       }
 
       return {
-        model: constrainedEvo(baseModel, { isOpen: () => true }),
+        model: modifyBaseFields(baseModel, { isOpen: () => true }),
         commands: Array.getSomes([maybeLockScroll, maybeInertOthers]),
       }
     }
@@ -441,7 +456,7 @@ export const makeUpdate = <Model extends BaseModel>(
           comboboxClose.model,
           Update.combine([
             stepModel => ({ model: stepModel, commands }),
-            foldAnimation(AnimationMessage.Hid()),
+            foldAnimationHide,
           ]),
           Update.withOutMessage(comboboxClose.outMessage),
         )
@@ -462,13 +477,14 @@ export const makeUpdate = <Model extends BaseModel>(
       CompletedScrollIntoView: () => ({ model }),
       CompletedClickItem: () => ({ model }),
       SuppressedItemCommit: () => ({ model }),
+      SuppressedEmptyItemNavigation: () => ({ model }),
       CompletedAnchorCombobox: () => ({ model }),
       CompletedAttachComboboxPreventBlur: () => ({ model }),
       CompletedAttachComboboxSelectOnFocus: () => ({ model }),
       CompletedPortalComboboxBackdrop: () => ({ model }),
       Opened: ({ maybeActiveItemIndex }) =>
         openCombobox(
-          constrainedEvo(model, {
+          modifyBaseFields(model, {
             maybeActiveItemIndex: () => maybeActiveItemIndex,
             activationTrigger: () =>
               Option.match(maybeActiveItemIndex, {
@@ -507,7 +523,7 @@ export const makeUpdate = <Model extends BaseModel>(
         activationTrigger,
         maybeImmediateSelection,
       }) => {
-        const highlightedModel = constrainedEvo(model, {
+        const highlightedModel = modifyBaseFields(model, {
           maybeActiveItemIndex: () => Option.some(index),
           activationTrigger: () => activationTrigger,
         })
@@ -547,7 +563,7 @@ export const makeUpdate = <Model extends BaseModel>(
         }
 
         return {
-          model: constrainedEvo(model, {
+          model: modifyBaseFields(model, {
             maybeActiveItemIndex: () => Option.some(index),
             activationTrigger: () => 'Pointer' as const,
             maybeLastPointerPosition: () => Option.some({ screenX, screenY }),
@@ -558,7 +574,7 @@ export const makeUpdate = <Model extends BaseModel>(
       DeactivatedItem: () =>
         model.activationTrigger === 'Pointer'
           ? {
-              model: constrainedEvo(model, {
+              model: modifyBaseFields(model, {
                 maybeActiveItemIndex: () => Option.none(),
               }),
             }
@@ -577,7 +593,7 @@ export const makeUpdate = <Model extends BaseModel>(
       UpdatedInputValue: ({ value }) => {
         if (model.isOpen) {
           return {
-            model: constrainedEvo(model, {
+            model: modifyBaseFields(model, {
               inputValue: () => value,
               maybeActiveItemIndex: () => Option.some(0),
               activationTrigger: () => 'Keyboard' as const,
@@ -586,7 +602,7 @@ export const makeUpdate = <Model extends BaseModel>(
         }
 
         return openCombobox(
-          constrainedEvo(model, {
+          modifyBaseFields(model, {
             inputValue: () => value,
             maybeActiveItemIndex: () => Option.some(0),
             activationTrigger: () => 'Keyboard' as const,
@@ -606,7 +622,7 @@ export const makeUpdate = <Model extends BaseModel>(
         }
 
         return Update.combine(
-          constrainedEvo(model, {
+          modifyBaseFields(model, {
             maybeActiveItemIndex: () => Option.none(),
             activationTrigger: () => 'Pointer' as const,
             maybeLastPointerPosition: () => Option.none(),
@@ -638,7 +654,7 @@ export const makeUpdate = <Model extends BaseModel>(
  *  Scene tests can call
  *  `Scene.Mount.resolve(AnchorCombobox, CompletedAnchorCombobox())`. */
 export const AnchorCombobox = Mount.define('AnchorCombobox', {
-  args: { buttonId: S.String, anchor: AnchorConfig },
+  args: { buttonId: Schema.String, anchor: AnchorConfig },
   messages: [Message.CompletedAnchorCombobox],
   execute: ({ element, buttonId, anchor }) =>
     Effect.gen(function* () {
@@ -914,29 +930,33 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
       const isLeaving =
         transitionState === 'LeaveStart' || transitionState === 'LeaveAnimating'
       const isVisible = isOpen || isLeaving
+      const isItemsPanelVisible =
+        isVisible && Array.isReadonlyArrayNonEmpty(items)
+      const isBackdropVisible =
+        isItemsPanelVisible || (isVisible && model.isModal)
 
       const animationAttributes: ReadonlyArray<
         ReturnType<typeof h.DataAttribute>
-      > = M.value(transitionState).pipe(
-        M.when('EnterStart', () => [
+      > = Match.value(transitionState).pipe(
+        Match.when('EnterStart', () => [
           h.DataAttribute('closed', ''),
           h.DataAttribute('enter', ''),
           h.DataAttribute('transition', ''),
         ]),
-        M.when('EnterAnimating', () => [
+        Match.when('EnterAnimating', () => [
           h.DataAttribute('enter', ''),
           h.DataAttribute('transition', ''),
         ]),
-        M.when('LeaveStart', () => [
+        Match.when('LeaveStart', () => [
           h.DataAttribute('leave', ''),
           h.DataAttribute('transition', ''),
         ]),
-        M.when('LeaveAnimating', () => [
+        Match.when('LeaveAnimating', () => [
           h.DataAttribute('closed', ''),
           h.DataAttribute('leave', ''),
           h.DataAttribute('transition', ''),
         ]),
-        M.orElse(() => []),
+        Match.orElse(() => []),
       )
 
       const isDisabledAtIndex = (index: number): boolean =>
@@ -983,19 +1003,31 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
         }
       }
 
+      const maybeValidActiveItemIndex = Option.flatMap(
+        maybeActiveItemIndex,
+        index => Option.as(Array.get(items, index), index),
+      )
+
       const resolveCommitMessage = (): Option.Option<Message> => {
         if (isReadOnly) {
-          return Option.as(maybeActiveItemIndex, Message.SuppressedItemCommit())
+          return Option.as(
+            maybeValidActiveItemIndex,
+            Message.SuppressedItemCommit(),
+          )
         } else {
-          return Option.map(maybeActiveItemIndex, index =>
+          return Option.map(maybeValidActiveItemIndex, index =>
             Message.RequestedItemClick({ index }),
           )
         }
       }
 
       const handleInputKeyDown = (key: string): Option.Option<Message> =>
-        M.value(key).pipe(
-          M.when('ArrowDown', () => {
+        Match.value(key).pipe(
+          Match.when('ArrowDown', () => {
+            if (Array.isReadonlyArrayEmpty(items)) {
+              return Option.some(Message.SuppressedEmptyItemNavigation())
+            }
+
             if (!isOpen) {
               return Option.some(
                 Message.Opened({
@@ -1012,7 +1044,11 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
               }),
             )
           }),
-          M.when('ArrowUp', () => {
+          Match.when('ArrowUp', () => {
+            if (Array.isReadonlyArrayEmpty(items)) {
+              return Option.some(Message.SuppressedEmptyItemNavigation())
+            }
+
             if (!isOpen) {
               return Option.some(
                 Message.Opened({
@@ -1029,13 +1065,13 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
               }),
             )
           }),
-          M.when('Enter', () => {
+          Match.when('Enter', () => {
             if (!isOpen) {
               return Option.none()
             }
             return resolveCommitMessage()
           }),
-          M.when('Escape', () => {
+          Match.when('Escape', () => {
             if (!isOpen) {
               return Option.none()
             }
@@ -1043,10 +1079,15 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
               Message.Closed({ restingInputValue, isClearable: !isReadOnly }),
             )
           }),
-          M.whenOr('Home', 'End', () => {
+          Match.whenOr('Home', 'End', () => {
             if (!isOpen) {
               return Option.none()
             }
+
+            if (Array.isReadonlyArrayEmpty(items)) {
+              return Option.some(Message.SuppressedEmptyItemNavigation())
+            }
+
             const targetIndex = resolveActiveIndex(key)
             return Option.some(
               Message.ActivatedItem({
@@ -1056,10 +1097,10 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
               }),
             )
           }),
-          M.orElse(() => Option.none()),
+          Match.orElse(() => Option.none()),
         )
 
-      const maybeActiveDescendant = Option.match(maybeActiveItemIndex, {
+      const maybeActiveDescendant = Option.match(maybeValidActiveItemIndex, {
         onNone: () => [],
         onSome: index => [h.AriaActiveDescendant(itemId(id, index))],
       })
@@ -1071,14 +1112,14 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
       const resolvedInputAttributes = [
         h.Id(`${id}-input`),
         h.Role('combobox'),
-        h.AriaExpanded(isVisible),
-        h.AriaControls(`${id}-items`),
+        h.AriaExpanded(isItemsPanelVisible),
+        ...(isItemsPanelVisible ? [h.AriaControls(`${id}-items`)] : []),
         h.Attribute('aria-autocomplete', 'list'),
         h.Attribute('aria-haspopup', 'listbox'),
         ...inputLabelAttributes,
         h.Autocomplete('off'),
         h.Value(model.inputValue),
-        ...maybeActiveDescendant,
+        ...(isItemsPanelVisible ? maybeActiveDescendant : []),
         ...(inputPlaceholder ? [h.Placeholder(inputPlaceholder)] : []),
         ...(isDisabled
           ? [h.AriaDisabled(true), h.DataAttribute('disabled', '')]
@@ -1287,6 +1328,7 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
       }
 
       const backdrop = h.keyed('div')(`${id}-backdrop`, [
+        h.Id(`${id}-backdrop`),
         h.OnMount(PortalComboboxBackdrop()),
         ...(isLeaving
           ? []
@@ -1317,14 +1359,11 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
             ]
           : renderedItems
 
-      const visibleContent = [
-        backdrop,
-        h.keyed('div')(
-          `${id}-items-container`,
-          itemsContainerAttributes,
-          scrollableItems,
-        ),
-      ]
+      const itemsPanel = h.keyed('div')(
+        `${id}-items-container`,
+        itemsContainerAttributes,
+        scrollableItems,
+      )
 
       const resolvedInputWrapperAttributes = [
         h.Id(`${id}-input-wrapper`),
@@ -1340,8 +1379,8 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
                 h.Id(`${id}-button`),
                 h.Type('button'),
                 h.Tabindex(-1),
-                h.AriaControls(`${id}-items`),
-                h.AriaExpanded(isVisible),
+                ...(isItemsPanelVisible ? [h.AriaControls(`${id}-items`)] : []),
+                h.AriaExpanded(isItemsPanelVisible),
                 h.Attribute('aria-haspopup', 'listbox'),
                 ...(isDisabled
                   ? [h.AriaDisabled(true), h.DataAttribute('disabled', '')]
@@ -1390,9 +1429,8 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
           h.input(resolvedInputAttributes),
           ...toggleButton,
         ]),
-        ...(isVisible && Array.isReadonlyArrayNonEmpty(items)
-          ? visibleContent
-          : []),
+        ...(isBackdropVisible ? [backdrop] : []),
+        ...(isItemsPanelVisible ? [itemsPanel] : []),
         ...hiddenInputs,
       ])
     },

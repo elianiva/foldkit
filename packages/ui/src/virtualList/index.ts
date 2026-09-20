@@ -4,7 +4,7 @@ import {
   Number,
   Option,
   Queue,
-  Schema as S,
+  Schema,
   Stream,
   pipe,
 } from 'effect'
@@ -18,7 +18,7 @@ import {
 } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { type View as SubmodelView, defineView } from 'foldkit/submodel'
 import * as Subscription from 'foldkit/subscription'
 
@@ -33,24 +33,24 @@ import * as Subscription from 'foldkit/subscription'
  */
 const Measurement = defineTaggedUnion({
   Unmeasured: {},
-  Measured: { containerHeight: S.Number },
+  Measured: { containerHeight: Schema.Number },
 })
 
 /** State of a programmatic scroll initiated by `scrollToIndex`. */
 const PendingScroll = defineTaggedUnion({
   Idle: {},
-  ScrollingToIndex: { index: S.Number, version: S.Number },
+  ScrollingToIndex: { index: Schema.Number, version: Schema.Number },
 })
 
 /** Schema for the virtual list's state. Tracks scroll position, container
  *  measurement, and any in-flight programmatic scroll. */
-export const Model = S.Struct({
-  id: S.String,
-  rowHeightPx: S.Number,
-  scrollTop: S.Number,
+export const Model = Schema.Struct({
+  id: Schema.String,
+  rowHeightPx: Schema.Number,
+  scrollTop: Schema.Number,
   measurement: Measurement,
   pendingScroll: PendingScroll,
-  pendingScrollVersion: S.Number,
+  pendingScrollVersion: Schema.Number,
 })
 
 export type Model = typeof Model.Type
@@ -59,9 +59,9 @@ export type Model = typeof Model.Type
 
 /** Union of all messages the virtual list component can produce. */
 export const Message = defineMessageUnion({
-  ScrolledContainer: { scrollTop: S.Number },
-  MeasuredContainer: { containerHeight: S.Number },
-  CompletedApplyScroll: { version: S.Number },
+  ScrolledContainer: { scrollTop: Schema.Number },
+  MeasuredContainer: { containerHeight: Schema.Number },
+  CompletedApplyScroll: { version: Schema.Number },
 })
 
 export type ScrolledContainer = typeof Message.ScrolledContainer.Type
@@ -93,7 +93,7 @@ export const init = (config: InitConfig): Model => ({
 // UPDATE
 
 export const ApplyScroll = Command.define('ApplyScroll', {
-  args: { id: S.String, scrollTop: S.Number, version: S.Number },
+  args: { id: Schema.String, scrollTop: Schema.Number, version: Schema.Number },
   messages: [Message.CompletedApplyScroll],
   execute: ({ id, scrollTop, version }) =>
     Effect.sync(() => {
@@ -109,7 +109,7 @@ export const ApplyScroll = Command.define('ApplyScroll', {
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ScrolledContainer: ({ scrollTop }) => ({
-      model: evo(model, { scrollTop: () => scrollTop }),
+      model: modifyFields(model, { scrollTop: () => scrollTop }),
     }),
 
     MeasuredContainer: ({ containerHeight }) => {
@@ -119,7 +119,7 @@ export const update = (model: Model, message: Message) =>
       if (needsInitialApply) {
         const nextVersion = Number.increment(model.pendingScrollVersion)
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             measurement: () => Measurement.Measured({ containerHeight }),
             pendingScrollVersion: () => nextVersion,
             pendingScroll: () =>
@@ -138,7 +138,7 @@ export const update = (model: Model, message: Message) =>
         }
       } else {
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             measurement: () => Measurement.Measured({ containerHeight }),
           }),
         }
@@ -150,7 +150,9 @@ export const update = (model: Model, message: Message) =>
         return { model }
       } else {
         return {
-          model: evo(model, { pendingScroll: () => PendingScroll.Idle() }),
+          model: modifyFields(model, {
+            pendingScroll: () => PendingScroll.Idle(),
+          }),
         }
       }
     },
@@ -165,7 +167,7 @@ const buildScrollToIndex = (
 ): ScrollReturn => {
   const nextVersion = Number.increment(model.pendingScrollVersion)
   return {
-    model: evo(model, {
+    model: modifyFields(model, {
       pendingScrollVersion: () => nextVersion,
       pendingScroll: () =>
         PendingScroll.ScrollingToIndex({ index, version: nextVersion }),
@@ -386,7 +388,7 @@ type ContainerObserverState = {
  *  the consumer having to teach the framework about navigation. */
 export const subscriptions = Subscription.make<Model, Message>()(entry => ({
   containerEvents: entry(
-    { id: S.String },
+    { id: Schema.String },
     {
       modelToDependencies: model => ({ id: model.id }),
       dependenciesToStream: ({ id }) =>
@@ -513,7 +515,7 @@ export type ViewInputs<Item> = Readonly<{
   itemToView: (item: Item, index: number) => Html
   itemToRowHeightPx?: (item: Item, index: number) => number
   overscan?: number
-  rowElement?: TagName
+  rowElement?: Exclude<TagName, 'textarea'>
   containerClassName?: string
   containerAttributes?: ReadonlyArray<ChildAttribute>
 }>

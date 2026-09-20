@@ -1,8 +1,8 @@
-import { Array, Crypto, Effect, Match as M, Schema as S } from 'effect'
+import { Array, Crypto, Effect, Schema } from 'effect'
 import { Calendar, Command, Update } from 'foldkit'
 import { type CalendarDate } from 'foldkit/calendar'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { BrowserCrypto } from '@effect/platform-browser'
 
@@ -10,8 +10,8 @@ import * as Entry from './entry'
 
 // MODEL
 
-export const Model = S.Struct({
-  entries: S.Array(Entry.Model),
+export const Model = Schema.Struct({
+  entries: Schema.Array(Entry.Model),
   today: Calendar.CalendarDate,
 })
 export type Model = typeof Model.Type
@@ -20,11 +20,11 @@ export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
   ClickedAddEntry: {},
-  SucceededGenerateEntryId: { entryId: S.String },
+  SucceededGenerateEntryId: { entryId: Schema.String },
   FailedGenerateEntryId: {},
-  RemovedEntry: { entryId: S.String },
+  RemovedEntry: { entryId: Schema.String },
   GotEntryMessage: {
-    entryId: S.String,
+    entryId: Schema.String,
     message: Entry.Message,
   },
 })
@@ -57,16 +57,13 @@ export const GenerateEntryId = Command.define('GenerateEntryId', {
 const foldEntryOutMessage: (
   entryId: string,
 ) => (outMessage: Entry.OutMessage) => Update.Step<Model, Message> = entryId =>
-  M.type<Entry.OutMessage>().pipe(
-    M.withReturnType<Update.Step<Model, Message>>(),
-    M.tagsExhaustive({
-      Removed: () => model => ({
-        model: evo(model, {
-          entries: Array.filter(entry => entry.id !== entryId),
-        }),
+  Entry.OutMessage.match<Update.Step<Model, Message>>({
+    Removed: () => model => ({
+      model: modifyFields(model, {
+        entries: Array.filter(entry => entry.id !== entryId),
       }),
     }),
-  )
+  })
 
 const foldEntry = (entryId: string) =>
   Update.foldChild({
@@ -74,7 +71,7 @@ const foldEntry = (entryId: string) =>
     read: (model: Model) =>
       Array.findFirst(model.entries, entry => entry.id === entryId),
     write: (model, nextEntry) =>
-      evo(model, {
+      modifyFields(model, {
         entries: Array.map(entry => (entry.id === entryId ? nextEntry : entry)),
       }),
     toParentMessage: message => Message.GotEntryMessage({ entryId, message }),
@@ -86,7 +83,7 @@ export const update = (model: Model, message: Message) =>
     ClickedAddEntry: () => ({ model, commands: [GenerateEntryId()] }),
 
     SucceededGenerateEntryId: ({ entryId }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         entries: Array.append(Entry.init(entryId)),
       }),
     }),
@@ -94,7 +91,7 @@ export const update = (model: Model, message: Message) =>
     FailedGenerateEntryId: () => ({ model }),
 
     RemovedEntry: ({ entryId }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         entries: Array.filter(entry => entry.id !== entryId),
       }),
     }),
@@ -113,4 +110,4 @@ export const isComplete = (model: Model): boolean =>
   Array.every(model.entries, Entry.isComplete)
 
 export const revealErrors = (model: Model): Model =>
-  evo(model, { entries: Array.map(Entry.revealErrors) })
+  modifyFields(model, { entries: Array.map(Entry.revealErrors) })

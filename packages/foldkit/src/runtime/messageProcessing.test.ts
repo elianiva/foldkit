@@ -1,11 +1,11 @@
-import { Effect, Fiber, Schema as S } from 'effect'
+import { Effect, Fiber, Schema } from 'effect'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Command } from '../command/index.js'
 import { __htmlBuilder, __requireDispatch } from '../html/index.js'
 import { defineMessageUnion } from '../message/index.js'
 import type * as Update from '../update/index.js'
-import { makeElement } from './runtime.js'
+import { makeElement } from './makeElement.js'
 
 const Message = defineMessageUnion({
   AppendedFirst: {},
@@ -17,11 +17,11 @@ const Message = defineMessageUnion({
   ThrewInUpdate: {},
   RemovedChild: {},
   UnmountedChild: {},
-  BurnedBudget: { label: S.String },
+  BurnedBudget: { label: Schema.String },
 })
 type Message = typeof Message.Type
 
-const Model = S.Struct({ log: S.Array(S.String) })
+const Model = Schema.Struct({ log: Schema.Array(Schema.String) })
 type Model = typeof Model.Type
 
 const h = __htmlBuilder<Message>()

@@ -10,7 +10,7 @@ The counter defines its Model with [Effect Schema](https://effect.website/docs/s
 
 ::Snippet{name="counterModel" label="model example"}
 
-`S.Struct` creates the runtime Schema. `typeof Model.Type` derives the TypeScript type from that same definition, so the runtime and compiler agree on the Model’s shape.
+`Schema.Struct` creates the runtime Schema. `typeof Model.Type` derives the TypeScript type from that same definition, so the runtime and compiler agree on the Model’s shape.
 
 That runtime value matters because TypeScript types disappear after compilation. Foldkit uses the Model Schema to encode and decode state preserved across hot updates. The same Schema can validate unknown data at application boundaries.
 
@@ -21,6 +21,8 @@ Use `defineTaggedUnion` when a Model field can have several named shapes. Declar
 ::Snippet{name="modelTaggedUnion" label="Model state union example"}
 
 `EditorMode` is the Schema stored in `Model` and the namespace used to construct values such as `EditorMode.Browsing()`. Its `match` method requires every variant to be handled. If you add another editor mode, TypeScript finds each match that needs a new branch.
+
+Use `EditorMode.matchOrElse` when selected variants need their own handlers and every remaining variant shares one fallback. The fallback is called only for variants not named in the case record; when the return type is inferred, its parameter narrows to those variants. Adding another editor mode includes it in that fallback.
 
 Use `EditorMode.guards.Editing` to check one variant and `EditorMode.isAnyOf(['Editing', 'Previewing'])` to check several.
 

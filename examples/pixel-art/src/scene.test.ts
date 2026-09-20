@@ -1,10 +1,18 @@
 import { Option } from 'effect'
-import { Command, click, expect, given, role, scene, text } from 'foldkit/scene'
+import {
+  Command,
+  Mount,
+  click,
+  expect,
+  given,
+  role,
+  scene,
+  text,
+} from 'foldkit/scene'
+import { modifyFields } from 'foldkit/struct'
 import { describe, test } from 'vitest'
 
 import { Dialog, Listbox, RadioGroup } from '@foldkit/ui'
-import { Message as DialogMessage } from '@foldkit/ui/dialog'
-import { Message as RadioGroupMessage } from '@foldkit/ui/radioGroup'
 
 import { ExportPng, SaveCanvas } from './command'
 import { createEmptyGrid } from './grid'
@@ -15,7 +23,12 @@ import { view } from './view'
 
 const resolveFocusOption = Command.resolve(
   RadioGroup.FocusOption,
-  RadioGroupMessage.CompletedFocusOption(),
+  RadioGroup.Message.CompletedFocusOption(),
+)
+
+const resolveDialogResources = Mount.resolve(
+  Dialog.AcquireResources,
+  Dialog.Message.SucceededAcquireResources(),
 )
 
 const createTestModel = (): Model => ({
@@ -39,14 +52,15 @@ const createTestModel = (): Model => ({
   paletteRadioGroup: RadioGroup.init({ id: 'palette-picker' }),
 })
 
-const createPaintedModel = (): Model => ({
-  ...createTestModel(),
-  grid: createEmptyGrid(4).map((row, y) =>
-    row.map((cell, x) =>
-      x === 0 && y === 0 ? Option.some<PaletteIndex>(0) : cell,
-    ),
-  ),
-})
+const createPaintedModel = (): Model =>
+  modifyFields(createTestModel(), {
+    grid: () =>
+      createEmptyGrid(4).map((row, y) =>
+        row.map((cell, x) =>
+          x === 0 && y === 0 ? Option.some<PaletteIndex>(0) : cell,
+        ),
+      ),
+  })
 
 describe('export workflow', () => {
   test('clicking Export PNG produces ExportPng Command', () => {
@@ -69,7 +83,8 @@ describe('export workflow', () => {
         ExportPng,
         Message.FailedExportPng({ error: 'Canvas 2D context not available' }),
       ),
-      Command.resolve(Dialog.ShowDialog, DialogMessage.SucceededShowDialog()),
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
+      resolveDialogResources,
       expect(text('Export Failed')).toExist(),
       expect(text('Canvas 2D context not available')).toExist(),
       expect(role('button', { name: 'Dismiss' })).toExist(),
@@ -85,10 +100,15 @@ describe('export workflow', () => {
         ExportPng,
         Message.FailedExportPng({ error: 'Canvas 2D context not available' }),
       ),
-      Command.resolve(Dialog.ShowDialog, DialogMessage.SucceededShowDialog()),
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
+      resolveDialogResources,
       expect(text('Export Failed')).toExist(),
       click(role('button', { name: 'Dismiss' })),
-      Command.resolve(Dialog.CloseDialog, DialogMessage.CompletedCloseDialog()),
+      Command.resolve(
+        Dialog.CloseDialog,
+        Dialog.Message.CompletedCloseDialog(),
+      ),
+      Mount.expectEnded(Dialog.AcquireResources),
       expect(text('Export Failed')).toBeAbsent(),
     )
   })
@@ -166,15 +186,15 @@ describe('history panel', () => {
   })
 
   test('undo enables after painting and re-disables after undoing', () => {
-    const modelWithHistory: Model = {
-      ...createTestModel(),
-      grid: createEmptyGrid(4).map((row, y) =>
-        row.map((cell, x) =>
-          x === 0 && y === 0 ? Option.some<PaletteIndex>(0) : cell,
+    const modelWithHistory: Model = modifyFields(createTestModel(), {
+      grid: () =>
+        createEmptyGrid(4).map((row, y) =>
+          row.map((cell, x) =>
+            x === 0 && y === 0 ? Option.some<PaletteIndex>(0) : cell,
+          ),
         ),
-      ),
-      undoStack: [createEmptyGrid(4)],
-    }
+      undoStack: () => [createEmptyGrid(4)],
+    })
 
     scene(
       { update, view },
@@ -196,7 +216,8 @@ describe('grid size change', () => {
       given(createPaintedModel()),
       click(role('radio', { name: '8' })),
       resolveFocusOption,
-      Command.resolve(Dialog.ShowDialog, DialogMessage.SucceededShowDialog()),
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
+      resolveDialogResources,
       expect(text('Change to 8\u00d78?')).toExist(),
       expect(
         text('This will clear your canvas and reset undo history.'),
@@ -207,43 +228,51 @@ describe('grid size change', () => {
   })
 
   test('confirming grid size change closes dialog and saves canvas', () => {
-    const modelWithPendingResize: Model = {
-      ...createTestModel(),
-      maybePendingGridSize: Option.some(8),
-      gridSizeConfirmDialog: Dialog.init({
-        id: 'grid-size-confirm-dialog',
-        isOpen: true,
-      }),
-      undoStack: [createEmptyGrid(4)],
-    }
+    const modelWithPendingResize: Model = modifyFields(createTestModel(), {
+      maybePendingGridSize: () => Option.some(8),
+      gridSizeConfirmDialog: () =>
+        Dialog.boot({
+          id: 'grid-size-confirm-dialog',
+        }).model,
+      undoStack: () => [createEmptyGrid(4)],
+    })
 
     scene(
       { update, view },
       given(modelWithPendingResize),
+      resolveDialogResources,
       expect(text('Change to 8\u00d78?')).toExist(),
       click(role('button', { name: 'Clear and Resize' })),
-      Command.resolve(Dialog.CloseDialog, DialogMessage.CompletedCloseDialog()),
+      Command.resolve(
+        Dialog.CloseDialog,
+        Dialog.Message.CompletedCloseDialog(),
+      ),
+      Mount.expectEnded(Dialog.AcquireResources),
       Command.resolve(SaveCanvas, Message.CompletedSaveCanvas()),
       expect(text('Change to 8\u00d78?')).toBeAbsent(),
     )
   })
 
   test('cancelling grid size change keeps current size', () => {
-    const modelWithPendingResize: Model = {
-      ...createTestModel(),
-      maybePendingGridSize: Option.some(8),
-      gridSizeConfirmDialog: Dialog.init({
-        id: 'grid-size-confirm-dialog',
-        isOpen: true,
-      }),
-    }
+    const modelWithPendingResize: Model = modifyFields(createTestModel(), {
+      maybePendingGridSize: () => Option.some(8),
+      gridSizeConfirmDialog: () =>
+        Dialog.boot({
+          id: 'grid-size-confirm-dialog',
+        }).model,
+    })
 
     scene(
       { update, view },
       given(modelWithPendingResize),
+      resolveDialogResources,
       expect(text('Change to 8\u00d78?')).toExist(),
       click(role('button', { name: 'Cancel' })),
-      Command.resolve(Dialog.CloseDialog, DialogMessage.CompletedCloseDialog()),
+      Command.resolve(
+        Dialog.CloseDialog,
+        Dialog.Message.CompletedCloseDialog(),
+      ),
+      Mount.expectEnded(Dialog.AcquireResources),
       expect(text('Change to 8\u00d78?')).toBeAbsent(),
     )
   })

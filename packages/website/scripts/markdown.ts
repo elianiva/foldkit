@@ -1,11 +1,9 @@
-import { Array as Array_, Option, Order, String as Str, pipe } from 'effect'
+import { Array, Option, Order, String, pipe } from 'effect'
 
-import { type AppRoute } from '../src/route'
+import { type AppRoute, SITE_URL } from '../src/route'
 import { type PageMetadata } from './metadata'
 
 // EXTRACTION
-
-const SITE_URL = 'https://foldkit.dev'
 
 const TEXT_NODE_TYPE = 3
 const ELEMENT_NODE_TYPE = 1
@@ -61,7 +59,7 @@ export const extractMarkdownFromRenderedDocument = (
       return ''
     }
     const tag = node.tagName.toLowerCase()
-    const inner = Array.from(node.childNodes)
+    const inner = globalThis.Array.from(node.childNodes)
       .map(collectInline)
       .join('')
       .replace(/ {2,}/g, ' ')
@@ -99,7 +97,10 @@ export const extractMarkdownFromRenderedDocument = (
   }
 
   const detectLanguage = (element: Element): string => {
-    const candidates = [element, ...Array.from(element.querySelectorAll('*'))]
+    const candidates = [
+      element,
+      ...globalThis.Array.from(element.querySelectorAll('*')),
+    ]
     for (const candidate of candidates) {
       const className = candidate.getAttribute('class') ?? ''
       const match = className.match(/language-([\w+-]+)/)
@@ -132,9 +133,9 @@ export const extractMarkdownFromRenderedDocument = (
       .join('\n')
 
   const extractList = (element: Element, ordered: boolean): string => {
-    const lines: Array<string> = []
+    const lines: globalThis.Array<string> = []
     let index = 1
-    for (const child of Array.from(element.children)) {
+    for (const child of globalThis.Array.from(element.children)) {
       if (child.tagName !== 'LI') {
         continue
       }
@@ -159,8 +160,8 @@ export const extractMarkdownFromRenderedDocument = (
   }
 
   const extractBlocks = (parent: Element): string => {
-    const parts: Array<string> = []
-    for (const node of Array.from(parent.childNodes)) {
+    const parts: globalThis.Array<string> = []
+    for (const node of globalThis.Array.from(parent.childNodes)) {
       if (node.nodeType === TEXT_NODE_TYPE) {
         const text = collapseWhitespace(node.textContent ?? '').trim()
         if (text.length > 0) {
@@ -305,7 +306,7 @@ export const SECTION_ORDER: ReadonlyArray<string> = [
 const sectionRank = (section: string): number =>
   pipe(
     SECTION_ORDER,
-    Array_.findFirstIndex(candidate => candidate === section),
+    Array.findFirstIndex(candidate => candidate === section),
     Option.getOrElse(() => SECTION_ORDER.length),
   )
 
@@ -331,10 +332,10 @@ const renderIndexSection = (
 ): string => {
   const lines = pipe(
     entries,
-    Array_.sortBy(titleOrder),
-    Array_.map(renderIndexEntry),
+    Array.sortBy(titleOrder),
+    Array.map(renderIndexEntry),
   )
-  return `## ${section}\n\n${Array_.join(lines, '\n')}`
+  return `## ${section}\n\n${Array.join(lines, '\n')}`
 }
 
 const WHEN_TO_USE = `When to use Foldkit:
@@ -372,21 +373,21 @@ export const buildLlmsIndex = (
 ): string => {
   const sectioned = pipe(
     entries,
-    Array_.filter(entry => entry.metadata.section.length > 0),
-    Array_.groupBy(entry => entry.metadata.section),
+    Array.filter(entry => entry.metadata.section.length > 0),
+    Array.groupBy(entry => entry.metadata.section),
   )
 
   const sectionBlocks = pipe(
     Object.entries(sectioned),
-    Array_.sortBy(Order.mapInput(sectionOrder, ([section]) => section)),
-    Array_.map(([section, sectionEntries]) =>
+    Array.sortBy(Order.mapInput(sectionOrder, ([section]) => section)),
+    Array.map(([section, sectionEntries]) =>
       renderIndexSection(section, sectionEntries),
     ),
   )
 
-  const header = `# Foldkit\n\n> ${SITE_BLURB}\n\nThis index lists every page on the Foldkit documentation site with a short description. Every page is also available as Markdown by appending \`.md\` to its URL (e.g. ${SITE_URL}/get-started/getting-started.md). A single-file concatenation of every page is available at ${SITE_URL}/llms-full.txt.\n\n${WHEN_TO_USE}`
+  const header = `# Foldkit\n\n> ${SITE_BLURB}\n\nThis index lists every page on the Foldkit documentation site with a short description. Every page is also available as Markdown by appending \`.md\` to its URL (e.g. ${SITE_URL}/get-started.md). A single-file concatenation of every page is available at ${SITE_URL}/llms-full.txt.\n\n${WHEN_TO_USE}`
 
-  return `${header}\n\n${DEVELOPER_RESOURCES_SECTION}\n\n${Array_.join(sectionBlocks, '\n\n')}\n`
+  return `${header}\n\n${DEVELOPER_RESOURCES_SECTION}\n\n${Array.join(sectionBlocks, '\n\n')}\n`
 }
 
 // FULL
@@ -412,7 +413,7 @@ const renderFullEntry = (entry: LlmsFullEntry): string => {
     entry.metadata.section.length === 0
       ? ''
       : `Section: ${entry.metadata.section}\n`
-  const trimmed = Str.trim(entry.markdown)
+  const trimmed = String.trim(entry.markdown)
   return `${sourceLine}\n${sectionLine}\n${trimmed}`
 }
 
@@ -422,9 +423,9 @@ export const buildLlmsFull = (
 ): string => {
   const sections = pipe(
     entries,
-    Array_.sortBy(fullEntryOrder),
-    Array_.map(renderFullEntry),
+    Array.sortBy(fullEntryOrder),
+    Array.map(renderFullEntry),
   )
   const header = `# Foldkit Documentation\n\nGenerated ${generatedDate} from ${SITE_URL}\n\n${SITE_BLURB}`
-  return `${header}\n\n---\n\n${Array_.join(sections, '\n\n---\n\n')}\n`
+  return `${header}\n\n---\n\n${Array.join(sections, '\n\n---\n\n')}\n`
 }

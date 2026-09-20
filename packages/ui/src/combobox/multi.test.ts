@@ -1,7 +1,8 @@
-import { Option, flow } from 'effect'
+import { Option } from 'effect'
 import { type HtmlBuilder, inertHtml as ih } from 'foldkit/html'
 import * as Scene from 'foldkit/scene'
 import * as Story from 'foldkit/story'
+import { modifyFields } from 'foldkit/struct'
 import { expect } from 'vitest'
 
 import { describe, it } from '@effect/vitest'
@@ -42,7 +43,7 @@ const acknowledgePreventBlur = Scene.Mount.resolve(
 
 const givenClosed = Story.given(init({ id: 'test' }))
 
-const givenOpenMulti = flow(
+const givenOpenMulti = Story.steps(
   givenClosed,
   Story.message(Message.Opened({ maybeActiveItemIndex: Option.some(0) })),
 )
@@ -180,11 +181,12 @@ describe('Combobox.Multi', () => {
       it('resets input to empty regardless of the resting input value', () => {
         Story.story(
           update,
-          Story.given({
-            ...init({ id: 'test' }),
-            isOpen: true,
-            inputValue: 'app',
-          }),
+          Story.given(
+            modifyFields(init({ id: 'test' }), {
+              isOpen: () => true,
+              inputValue: () => 'app',
+            }),
+          ),
           Story.message(
             Message.Closed({ restingInputValue: 'Apple', isClearable: true }),
           ),
@@ -215,7 +217,9 @@ describe('Combobox.Multi', () => {
       })
 
       it('is a no-op when already closed', () => {
-        const closedModel = { ...init({ id: 'test' }), inputValue: 'app' }
+        const closedModel = modifyFields(init({ id: 'test' }), {
+          inputValue: () => 'app',
+        })
 
         Story.story(
           update,
@@ -278,7 +282,7 @@ describe('Combobox.Multi', () => {
   })
 
   describe('modal commands', () => {
-    const givenOpenModal = flow(
+    const givenOpenModal = Story.steps(
       Story.given(init({ id: 'test', isModal: true })),
       Story.message(Message.Opened({ maybeActiveItemIndex: Option.some(0) })),
       Story.Command.resolveAllExact(
@@ -638,7 +642,9 @@ describe('Combobox.Multi', () => {
               selectedValues: ['Apple'],
             }),
           },
-          Scene.given({ ...openMultiModel(), immediate: true }),
+          Scene.given(
+            modifyFields(openMultiModel(), { immediate: () => true }),
+          ),
           acknowledgeAnchor,
           acknowledgeBackdrop,
           Scene.keydown(input, 'ArrowDown'),
@@ -703,7 +709,12 @@ describe('Combobox.Multi', () => {
             update,
             view: sceneView({ isReadOnly: true, selectedValues: ['Apple'] }),
           },
-          Scene.given({ ...openMultiModel(), nullable: true, inputValue: '' }),
+          Scene.given(
+            modifyFields(openMultiModel(), {
+              nullable: () => true,
+              inputValue: () => '',
+            }),
+          ),
           acknowledgeAnchor,
           acknowledgeBackdrop,
           Scene.keydown(input, 'Escape'),
@@ -719,7 +730,12 @@ describe('Combobox.Multi', () => {
             update,
             view: sceneView({ selectedValues: ['Apple'] }),
           },
-          Scene.given({ ...openMultiModel(), nullable: true, inputValue: '' }),
+          Scene.given(
+            modifyFields(openMultiModel(), {
+              nullable: () => true,
+              inputValue: () => '',
+            }),
+          ),
           acknowledgeAnchor,
           acknowledgeBackdrop,
           Scene.keydown(input, 'Escape'),

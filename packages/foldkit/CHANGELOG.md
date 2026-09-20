@@ -1,5 +1,627 @@
 # foldkit
 
+## 0.163.0
+
+### Minor Changes
+
+- [#1419](https://github.com/foldkit/foldkit/pull/1419) [`7aa1788`](https://github.com/foldkit/foldkit/commit/7aa1788213ff83e3a3c80bbc7192bdbe9907b495) Thanks [@devinjameson](https://github.com/devinjameson)! - Rename the mapper in `Subscription.fromEvent` from `toMessage` to `mapEvent`, the mappers in `Subscription.fromEventFilterMap` and `Subscription.fromEventFilterMapPreventDefault` to `filterMapEvent`, and each `Subscription.keyBindings` binding's mapper to `mapEvent`. Update those config fields when upgrading. These helpers remain generic Streams: their output is inferred from the callback, and `Subscription.make` checks the final application Message type.
+
+  `Subscription.animationFrame` keeps `toMessage` because it returns a Subscription entry; `Subscription.lift` keeps `toParentMessage` because it maps a child Message to a parent Message. `@foldkit/ui` adopts the new event mapper field and requires the matching Foldkit release.
+
+- [#1387](https://github.com/foldkit/foldkit/pull/1387) [`67af362`](https://github.com/foldkit/foldkit/commit/67af362a488c7f5376a3b7a0e655351171411fd2) Thanks [@filipfalcon](https://github.com/filipfalcon)! - `Document.canonical` no longer defaults to `window.location`, and `Server.renderToString` no longer defaults it to `Request.url`. Only the application knows which route and query values identify a page. For example: `?page=2` may identify a different page, while `?utm_source=newsletter` usually does not.
+
+  Derive `canonical` from the typed route in the Model. If no render supplies it, the client leaves the served `<link rel="canonical">` unchanged or keeps the document without one. When the client first writes `canonical`, it records the existing `href`. A later omission restores that value, or removes the element if the runtime created it. On a hydrated page, the recorded value can be the initial route's server-rendered canonical.
+
+  `ogUrl` can be supplied independently. When it is omitted alongside an explicit `canonical`, it uses that canonical. Its client-side restore and removal behavior matches `canonical`.
+
+  Server rendering returns `canonical` only when the view supplies it. It returns `ogUrl` when the view supplies it or uses an explicit `canonical` as the fallback. Template injection leaves either tag unchanged when the corresponding field is absent.
+
+  **Migration:** applications that relied on the old default must return `canonical` from view. Build it from the route in the Model, as you would build `title`, rather than reading the address bar.
+
+- [#1412](https://github.com/foldkit/foldkit/pull/1412) [`a2ff67b`](https://github.com/foldkit/foldkit/commit/a2ff67b525fc0837497dc93b62db7a809121a75e) Thanks [@devinjameson](https://github.com/devinjameson)! - Export `Subscription.EntryGates` so consumers can name the per-entry gate map accepted by `Subscription.lift`. Fix links in the generated Foldkit API reference.
+
+- [#1295](https://github.com/foldkit/foldkit/pull/1295) [`fa51957`](https://github.com/foldkit/foldkit/commit/fa519573715c4ea1944c87c576dff240d18d9bcc) Thanks [@elianiva](https://github.com/elianiva)! - `h.OnPointerDown` now hands its callback the event's `pointerId`, so a handler can tell which pointer started a gesture and ignore unrelated touches. It is the eighth callback argument, after `clientY`. `Scene.pointerDown` takes a matching `pointerId` option, defaulting to `0`.
+
+- [#1295](https://github.com/foldkit/foldkit/pull/1295) [`fa51957`](https://github.com/foldkit/foldkit/commit/fa519573715c4ea1944c87c576dff240d18d9bcc) Thanks [@elianiva](https://github.com/elianiva)! - Pass the originating event target as the final argument of `h.OnPointerDown` callbacks. Existing callbacks remain compatible; the target lets parent gesture handlers ignore nested controls or selectable content without bypassing Message dispatch. `Scene.pointerDown` now supplies a detached DOM representation of the target and its ancestors so tests exercise the same selector checks.
+
+- [#1410](https://github.com/foldkit/foldkit/pull/1410) [`591649e`](https://github.com/foldkit/foldkit/commit/591649ea58a648ff777bfc4fce3952dc004f202c) Thanks [@devinjameson](https://github.com/devinjameson)! - Rename `evo` to `modifyFields`
+
+  Replace `evo` imports and calls with `modifyFields` from `foldkit/struct`. Replace `makeConstrainedEvo` with `makeModifyFieldsFor`. The same names are available through the `Struct` namespace from `foldkit`. Both helpers keep their existing behavior and type checking. The old names are removed.
+
+  Use `makeModifyFieldsFor<Base>()` to create a field modifier for generic helpers whose Model extends `Base`. It checks transformers against the base shape while preserving the full Model type.
+
+  `@foldkit/ui` and `@foldkit/devtools` use the renamed helpers and require Foldkit 0.163.0 or newer.
+
+  Rename the lint rule `foldkit/no-spread-in-evo` to `foldkit/no-spread-in-modify-fields`. Update explicit rule settings to the new name. The generated presets and the Submodel boundary rules recognize `modifyFields` calls.
+
+  New app templates, documentation, examples, and the shipped Foldkit app skills use `modifyFields`.
+
+- [#1413](https://github.com/foldkit/foldkit/pull/1413) [`3b1d5ba`](https://github.com/foldkit/foldkit/commit/3b1d5ba8f2c5e9ee6ab4cb57ad5ce49744334314) Thanks [@devinjameson](https://github.com/devinjameson)! - Upgrade Effect and its platform and test packages to `4.0.0-rc.116`. Foldkit packages with exact Effect peer dependencies now require rc.116. Pin your application's `effect` and `@effect/platform-browser` dependencies to `4.0.0-rc.116` when upgrading Foldkit. New applications generated by `create-foldkit-app` also use rc.116. The Oxlint plugin recognizes the renamed `Stream.mapBoth` callbacks, `onElement` and `onError`.
+
+### Patch Changes
+
+- Rebuild with the release's shared tooling configuration so the published packages and website use the same build inputs.
+
+- [#1408](https://github.com/foldkit/foldkit/pull/1408) [`00f6a30`](https://github.com/foldkit/foldkit/commit/00f6a30010e3aecc38975bddcee435e57f9c338e) Thanks [@devinjameson](https://github.com/devinjameson)! - Ensure Subscriptions and ManagedResources observe Model changes made by Messages buffered during boot.
+
+## 0.162.0
+
+### Minor Changes
+
+- [#1406](https://github.com/foldkit/foldkit/pull/1406) [`01b0aab`](https://github.com/foldkit/foldkit/commit/01b0aab09684c7c47579529ef52bb4ba997871d8) Thanks [@devinjameson](https://github.com/devinjameson)! - Rename `Subscription.keyboardShortcuts` to `Subscription.keyBindings`, the `shortcut` field to `keys`, and the related public types to `KeySequence`, `KeyBinding`, and `KeyBindingsConfig`. Replace the old names when migrating.
+
+## 0.161.0
+
+### Minor Changes
+
+- [#683](https://github.com/foldkit/foldkit/pull/683) [`b58e602`](https://github.com/foldkit/foldkit/commit/b58e60279bccc6584985315645bfae664a7b90c5) Thanks [@devinjameson](https://github.com/devinjameson)! - DevTools now attributes a Command to its destination Submodel from the actual resolved Message, without replaying Message mappers. Command history records and serialized Commands carry `maybeSubmodelPath`: `None` until resolution, `Some([])` for a top-level result, or `Some(tags)` for a Submodel result. Consumers constructing `CommandRecord` must add an invocation `id` and `maybeSubmodelPath`; consumers constructing a serialized Command must add `maybeSubmodelPath`.
+
+- [#1401](https://github.com/foldkit/foldkit/pull/1401) [`9a32438`](https://github.com/foldkit/foldkit/commit/9a324382d74c0f5f398c6427944e8baf2672e765) Thanks [@devinjameson](https://github.com/devinjameson)! - Add `Update.foldChildInit` and `Update.foldChildInits` to construct a parent Model from child init or boot results, map their Commands, and handle their OutMessages. Both APIs take the child results first. Existing initialization code remains valid; adopting these helpers is optional.
+
+  ### One child
+
+  For example, a Workspace Submodel contains a Search Submodel. Previously, the Workspace Submodel constructed its Model and mapped the Search Submodel's Commands separately:
+
+  ```ts
+  const searchInit = Search.init()
+
+  return {
+    model: Model.make({ search: searchInit.model }),
+    commands: Command.mapMessages(searchInit.commands, message =>
+      Message.GotSearchMessage({ message }),
+    ),
+  }
+  ```
+
+  Now, `foldChildInit` does both:
+
+  ```ts
+  return Update.foldChildInit(Search.init(), {
+    toParentModel: search => Model.make({ search }),
+    toParentMessage: message => Message.GotSearchMessage({ message }),
+  })
+  ```
+
+  If the Search Submodel emits an OutMessage, the Workspace Submodel must handle it. Supply `foldOutMessage` to update the Workspace Submodel's Model or return Commands in response. Supply `toParentOutMessage` to translate it into the Workspace Submodel's OutMessage type for its own parent. Both can be supplied when the event should be handled locally and reported upward.
+
+  ### Several children
+
+  For a Workspace Submodel containing Search and Editor Submodels, the previous initialization code assembled both Models and mapped both sets of Commands:
+
+  ```ts
+  const searchInit = Search.init()
+  const editorInit = Editor.init()
+
+  return {
+    model: Model.make({ search: searchInit.model, editor: editorInit.model }),
+    commands: [
+      ...Command.mapMessages(searchInit.commands, message =>
+        Message.GotSearchMessage({ message }),
+      ),
+      ...Command.mapMessages(editorInit.commands, message =>
+        Message.GotEditorMessage({ message }),
+      ),
+    ],
+  }
+  ```
+
+  Now, `foldChildInits` keeps the same wiring together:
+
+  ```ts
+  return Update.foldChildInits(
+    { search: Search.init(), editor: Editor.init() },
+    {
+      toParentModel: ({ search, editor }) => Model.make({ search, editor }),
+      folds: {
+        search: {
+          toParentMessage: message => Message.GotSearchMessage({ message }),
+        },
+        editor: {
+          toParentMessage: message => Message.GotEditorMessage({ message }),
+        },
+      },
+    },
+  )
+  ```
+
+  ### Handling child OutMessages locally
+
+  Each entry also accepts `foldOutMessage`. For example, a Workspace Submodel contains Search and Editor Submodels whose boot results can report `PreparedResults` and `OpenedDocument`. The Workspace Submodel handles both locally to record the selected and opened document IDs:
+
+  ```ts
+  const foldSearchOutMessage = Search.OutMessage.match<
+    Update.Step<Model, Message>
+  >({
+    PreparedResults:
+      ({ documentId }) =>
+      model => ({
+        model: evo(model, {
+          maybeSelectedDocumentId: () => Option.some(documentId),
+        }),
+      }),
+  })
+
+  const foldEditorOutMessage = Editor.OutMessage.match<
+    Update.Step<Model, Message>
+  >({
+    OpenedDocument:
+      ({ documentId }) =>
+      model => ({
+        model: evo(model, {
+          maybeOpenedDocumentId: () => Option.some(documentId),
+        }),
+      }),
+  })
+
+  return Update.foldChildInits(
+    {
+      search: Search.boot(),
+      editor: Editor.boot(),
+    },
+    {
+      toParentModel: ({ search, editor }) =>
+        Model.make({
+          search,
+          editor,
+          maybeSelectedDocumentId: Option.none(),
+          maybeOpenedDocumentId: Option.none(),
+        }),
+      folds: {
+        search: {
+          toParentMessage: message => Message.GotSearchMessage({ message }),
+          foldOutMessage: foldSearchOutMessage,
+        },
+        editor: {
+          toParentMessage: message => Message.GotEditorMessage({ message }),
+          foldOutMessage: foldEditorOutMessage,
+        },
+      },
+    },
+  )
+  ```
+
+  Foldkit constructs the complete parent Model once, then runs the handlers in the order of the named fields in `folds`. The Editor fold receives the Model produced by the Search fold, so it keeps `maybeSelectedDocumentId` when setting `maybeOpenedDocumentId`. A child that emits no OutMessage skips its handler. These folds handle the OutMessages locally, so no `resolveOutMessage` is needed. Commands run independently; a later child's Commands do not wait for an earlier child's Commands to finish.
+
+  ### Combining child OutMessages
+
+  For example, App contains a Workspace Submodel, which contains Search and Editor Submodels. The Search and Editor Submodels' boot functions can report that they restored a saved query or draft. App should receive one restoration notice containing both results.
+
+  The Workspace Submodel translates its children's OutMessages with `toParentOutMessage`. The same adapters can report an individual restoration during a later update. During boot, `resolveOutMessage` combines them into a single `RestoredWorkspace` OutMessage for App:
+
+  ```ts
+  const OutMessage = defineMessageUnion({
+    RestoredSearch: { query: Schema.String },
+    RestoredEditor: { documentId: Schema.String },
+    RestoredWorkspace: {
+      maybeQuery: Schema.Option(Schema.String),
+      maybeDocumentId: Schema.Option(Schema.String),
+    },
+  })
+
+  const toParentSearchOutMessage = Search.OutMessage.match({
+    RestoredQuery: ({ query }) => OutMessage.RestoredSearch({ query }),
+  })
+
+  const toParentEditorOutMessage = Editor.OutMessage.match({
+    RestoredDraft: ({ documentId }) =>
+      OutMessage.RestoredEditor({ documentId }),
+  })
+
+  return Update.foldChildInits(
+    {
+      search: Search.boot(),
+      editor: Editor.boot(),
+    },
+    {
+      toParentModel: ({ search, editor }) => Model.make({ search, editor }),
+      folds: {
+        search: {
+          toParentMessage: message => Message.GotSearchMessage({ message }),
+          toParentOutMessage: toParentSearchOutMessage,
+        },
+        editor: {
+          toParentMessage: message => Message.GotEditorMessage({ message }),
+          toParentOutMessage: toParentEditorOutMessage,
+        },
+      },
+      resolveOutMessage: ({ search, editor }) =>
+        OutMessage.RestoredWorkspace({
+          maybeQuery: pipe(
+            Option.fromNullishOr(search),
+            Option.map(outMessage =>
+              Match.value(outMessage).pipe(
+                Match.tagsExhaustive({
+                  RestoredSearch: ({ query }) => query,
+                }),
+              ),
+            ),
+          ),
+          maybeDocumentId: pipe(
+            Option.fromNullishOr(editor),
+            Option.map(outMessage =>
+              Match.value(outMessage).pipe(
+                Match.tagsExhaustive({
+                  RestoredEditor: ({ documentId }) => documentId,
+                }),
+              ),
+            ),
+          ),
+        }),
+    },
+  )
+  ```
+
+  When both children report a restoration, the OutMessage preserves both values. When only one does, the other field is `None`. When neither does, the resolver is skipped and the result has no `outMessage`.
+
+  The resolver receives the emitted OutMessages under their child keys and the final parent Model as a second argument. This preserves boot-time information that the current Model may not retain, such as whether an existing query was restored. If the Model already contains everything needed for the parent's OutMessage, handle the children locally and attach that OutMessage afterward with `Update.withOutMessage`.
+
+  Newly generated apps also include guidance for both initialization helpers in `FOLDKIT.md`.
+
+- [#623](https://github.com/foldkit/foldkit/pull/623) [`5059f48`](https://github.com/foldkit/foldkit/commit/5059f483f1be8fa15560bdfa3c0583bdcde4bc61) Thanks [@artile](https://github.com/artile)! - Add `Subscription.keyboardShortcuts`, a declarative Stream helper for mapping single key presses, modifier combinations, and ordered key sequences to Messages. It resolves `Mod` to the platform modifier, suppresses shortcuts from editable elements and IME composition by default, ignores held-key repeats, expires incomplete sequences, validates ambiguous binding tables, and calls `preventDefault` for matched presses unless a binding opts out. Bindings can be enabled from Subscription dependencies when their availability follows the Model.
+
+  For example:
+
+  ```ts
+  Subscription.keyboardShortcuts<Message>({
+    bindings: [
+      { shortcut: 'Mod+K', toMessage: () => Message.PressedSearchShortcut() },
+      {
+        shortcut: ['G', 'H'],
+        toMessage: () => Message.PressedHomeShortcut(),
+      },
+    ],
+  })
+  ```
+
+- [#884](https://github.com/foldkit/foldkit/pull/884) [`10b9fda`](https://github.com/foldkit/foldkit/commit/10b9fda28a245f25ddad22ca7da8ad52c3dd754f) Thanks [@devinjameson](https://github.com/devinjameson)! - Drive calendar date formatting from the locale instead of hardcoding English
+
+  `Calendar.LocaleConfig` carried translated month and day names, but the formatters built their output with English word order, so a German locale rendered "Januar 15, 2026" rather than "15. Januar 2026". Ordering now lives in the config as data.
+
+  `LocaleConfig` gains `longFormat`, `shortFormat`, `ariaLabelFormat`, and `monthYearFormat`. A `DateFormat` is a non-empty ordered list of `Calendar.DatePart` values, so day-first and year-first locales render correctly without a code change. `MonthYearFormat` accepts only month, year, and literal parts. `Calendar.format` applies an arbitrary `DateFormat`, and the new `Calendar.formatMonthYear` renders the month-and-year shape used by calendar headings.
+
+  This is a breaking change to `LocaleConfig`. A locale built by spreading `defaultEnglishLocale` keeps working; one constructed field by field needs the four new fields.
+
+  In `@foldkit/ui`, the Calendar drew column header accessible names from a hardcoded English array, ignoring `locale.dayNames` entirely, and built its heading and month-cell labels by interpolating month name and year in English order. Both now go through the locale. The remaining date-dependent English copy is overridable through `ViewInputs`: `toDaysGridLabel`, `toWeekLabel`, `toMonthsGridLabel`, and `toYearsGridLabel`, each defaulting to the previous English text. DatePicker accepts the same Calendar label fields and forwards them to its embedded Calendar.
+
+- [#1055](https://github.com/foldkit/foldkit/pull/1055) [`bb42870`](https://github.com/foldkit/foldkit/commit/bb4287038802343c07d53ebb5cedb064e9f05038) Thanks [@devinjameson](https://github.com/devinjameson)! - Infer Subscription and ManagedResource types from the values passed to their composition helpers.
+
+  `Subscription.aggregate` and `ManagedResource.aggregate` now accept records directly without Model, Message, or service type arguments. The result preserves each named entry and its exact dependency, Schema, service, and callback types.
+
+  Before:
+
+  ```ts
+  const subscriptions = Subscription.aggregate<Model, Message>()(
+    homeSubscriptions,
+    roomSubscriptions,
+  )
+
+  const managedResources = ManagedResource.aggregate<Model, Message>()(
+    cameraManagedResources,
+    socketManagedResources,
+  )
+  ```
+
+  After:
+
+  ```ts
+  const subscriptions = Subscription.aggregate(
+    homeSubscriptions,
+    roomSubscriptions,
+  )
+
+  const managedResources = ManagedResource.aggregate(
+    cameraManagedResources,
+    socketManagedResources,
+  )
+  ```
+
+  The curried form remains available when an explicit record contract is required. The first record with a Model dependency establishes the common Model. Later records are checked against it, while Message and Effect service requirements widen across the aggregate. A record containing only `Subscription.persistent` entries does not establish the Model. Directly inferred aggregates preserve literal keys instead of adding a string index signature; use the curried form or a `Subscriptions<Model, Message>` annotation when dynamic string indexing is part of the contract.
+
+  `Subscription.fromEvent`, `fromEventFilterMap`, and `fromEventFilterMapPreventDefault` now infer the event from `target` and `type`. DOM event names are checked against the target, and the mapper receives the corresponding event type.
+
+  Before:
+
+  ```ts
+  Subscription.fromEvent<KeyboardEvent, Message>({
+    target: window,
+    type: 'keydown',
+    toMessage: event => Message.PressedKey({ key: event.key }),
+  })
+  ```
+
+  After:
+
+  ```ts
+  Subscription.fromEvent({
+    target: window,
+    type: 'keydown',
+    toMessage: event => Message.PressedKey({ key: event.key }),
+  })
+  ```
+
+  **Breaking:** remove the Event and Message type arguments from all three event helpers. A custom `EventTarget` that dispatches typed events now declares its event map through `Subscription.TypedEventTarget`.
+
+  Before:
+
+  ```ts
+  const slowWarningTarget = new EventTarget()
+
+  const slowWarnings = Subscription.fromEvent<
+    CustomEvent<SlowWarningReport>,
+    Message
+  >({
+    target: slowWarningTarget,
+    type: 'foldkit:slow-warning',
+    toMessage: event => Message.ReceivedSlowWarning({ report: event.detail }),
+  })
+  ```
+
+  After:
+
+  ```ts
+  const slowWarningTarget: Subscription.TypedEventTarget<{
+    'foldkit:slow-warning': CustomEvent<SlowWarningReport>
+  }> = new EventTarget()
+
+  const slowWarnings = Subscription.fromEvent({
+    target: slowWarningTarget,
+    type: 'foldkit:slow-warning',
+    toMessage: event => Message.ReceivedSlowWarning({ report: event.detail }),
+  })
+  ```
+
+  On a native target, the annotation adds custom events while retaining native events and overrides a native event only when it declares the same name. Named config types now take Target, Type, and Message type parameters:
+
+  Before:
+
+  ```ts
+  type ShortcutConfig = Subscription.FromEventConfig<KeyboardEvent, Message>
+  ```
+
+  After:
+
+  ```ts
+  type ShortcutConfig = Subscription.FromEventConfig<Window, 'keydown', Message>
+  ```
+
+  Apply the same change to `FromEventFilterMapConfig` and `FromEventFilterMapPreventDefaultConfig`. The prevent-default config also rejects `options: { passive: true }` at compile time; its runtime guard remains for unchecked JavaScript inputs.
+
+- [#1397](https://github.com/foldkit/foldkit/pull/1397) [`4cb3546`](https://github.com/foldkit/foldkit/commit/4cb3546e35b7110576212af07238f222fbb6624e) Thanks [@devinjameson](https://github.com/devinjameson)! - Make modal Dialog backgrounds inert and hidden from assistive technology while keeping permitted overlays and Dialogs stacked above the modal available. Reconcile newly mounted portals and other late page content, coordinate stacked Dialogs, reacquire resources for an open Dialog restored by development Model preservation, and release Dialogs in topmost-first order when the owning runtime stops.
+
+  `Dialog.init()` now always creates a closed Dialog. Replace an initially open `Dialog.init()` call such as:
+
+  ```ts
+  const dialog = Dialog.init({ id: 'confirm', isOpen: true })
+  ```
+
+  with `Dialog.boot()`. Pass the boot result to `Update.foldChildInit`, construct the parent Model through `toParentModel`, map child Commands through `toParentMessage`, and handle the OutMessage through the same `foldDialogOutMessage` used by the parent update:
+
+  ```ts
+  return Update.foldChildInit(Dialog.boot({ id: 'confirm' }), {
+    toParentModel: dialog => ({ dialog }),
+    toParentMessage: toGotDialogMessage,
+    foldOutMessage: foldDialogOutMessage,
+  })
+  ```
+
+  This ensures an initially open Dialog acquires the same isolation, scroll lock, focus trap, stack registration, and cleanup as one opened later.
+
+  Because this Dialog resource path uses the updated `Dom.showDialog` contract, `@foldkit/ui` now requires `foldkit` 0.161.0 or newer.
+
+  Point UI controls at panels only while those panels are rendered, and keep an empty Combobox from exposing an invalid active descendant or expanded listbox. Keep the modal Combobox backdrop available for dismissal even when filtering leaves no list items. Render Toast containers and entries as neutral `<div>` elements so their live-region roles do not conflict with list semantics.
+
+  Export `DragAndDrop.DragState` so consumers can match drag phases through the tagged union API when deriving accessible announcements and other parent behavior.
+
+  Tabs defaults to active-only panel rendering when deciding which tabs receive `aria-controls`. Pass `panelMount: 'All'` when every tab panel remains mounted, including when inactive panels are hidden. DevTools opts into that strategy for its Inspector tabs.
+
+  Toast markup changes from `<ol>` and `<li>` to `<div>` elements. Update any element-selector CSS or DOM queries that target those Toast wrappers.
+
+  `Dom.showDialog` now resolves to `true` when it installs a Dialog's resources and `false` when that id already holds them. Callers that explicitly annotated its result as `void` must accept or ignore the boolean result.
+
+### Patch Changes
+
+- Rebuild with the release's shared tooling configuration so the published packages and website use the same build inputs.
+
+## 0.160.0
+
+### Minor Changes
+
+- [#663](https://github.com/foldkit/foldkit/pull/663) [`63fa8e9`](https://github.com/foldkit/foldkit/commit/63fa8e97d24aadf7a312ee16324c4a956285ad0e) Thanks [@devinjameson](https://github.com/devinjameson)! - Add five Foldkit convention rules, including three from @artile's [#624](https://github.com/foldkit/foldkit/issues/624) that were curated against real code with real Oxlint and reimplemented from their behavior specifications in Foldkit's current rule infrastructure. The remaining rules from that proposal were cut because they overlap accessibility linters, match CSS strings, depend on filenames or cross-file helper tracing, or enforce a debatable opinion.
+
+  - Dispatch: `no-switch-on-message-tag` steers `switch (value._tag)` to the union's exhaustive `match` helper or Effect `Match`.
+  - Effect resources: `acquire-release-constructs-in-acquire-body` requires the acquire Effect to build its resource lazily instead of returning an eagerly created or captured handle that can leak on interruption.
+  - State modeling: `prefer-option-over-nullable-in-model` keeps direct `Model` fields on `Schema.Option` instead of nullable or optional Schema fields.
+  - Routing: `no-route-query-constructor-default` rejects constructor defaults that do not run while `Route.query` decodes, pointing to `Schema.withDecodingDefaultKey` or `Schema.OptionFromOptional` instead.
+  - Command composition: `prefer-command-mapmessage` rejects lifting a result Message by mapping the Effect, which dispatches correctly but leaves Story and Scene unable to recover the lift. Use `Command.mapMessage` or `Command.mapMessages` instead.
+
+  Each rule ships with a colocated unit test, a real-Oxlint integration fixture, and website documentation. The rules are enabled in the recommended preset.
+
+  `Command.mapEffect` now preserves the Command's result Message type while still allowing transformations of its error and requirement channels. This makes its execution-only role explicit in the API.
+
+  BREAKING CHANGE: A `Command.mapEffect` transform can no longer change the result Message type. Replace result transforms with `Command.mapMessage` or `Command.mapMessages`. Transforms that provide services, add retry or delay behavior, or otherwise preserve the result Message continue to work unchanged.
+
+- [#1385](https://github.com/foldkit/foldkit/pull/1385) [`51d0d00`](https://github.com/foldkit/foldkit/commit/51d0d002f20ce59203f09d33537950ac1fad5baf) Thanks [@devinjameson](https://github.com/devinjameson)! - Run page-owning applications with Effect's `BrowserRuntime` again now that it interrupts on a non-persisted `pagehide` instead of `beforeunload`.
+
+  Real page discards once again get best-effort runtime finalization, while downloads, cancelled navigations, and back/forward cache restores leave the application alive. `foldkit` once again requires `@effect/platform-browser@4.0.0-rc.115` as a peer dependency; install it alongside `effect@4.0.0-rc.115`.
+
+- [#1383](https://github.com/foldkit/foldkit/pull/1383) [`b6d0a9b`](https://github.com/foldkit/foldkit/commit/b6d0a9bb32979c08c2ddfee9ffbf5c19d9f5594c) Thanks [@devinjameson](https://github.com/devinjameson)! - Bump Effect to `4.0.0-rc.115` (from `4.0.0-rc.112`). Foldkit's `effect` peer dependency now requires `4.0.0-rc.115`, and `@foldkit/devtools` pins its `@effect/platform-browser` peer dependency to the same version.
+
+  Pin your Effect packages to `4.0.0-rc.115` to match this release. While Effect v4 is in prerelease, use exact pins rather than ranges:
+
+  ```sh
+  pnpm add effect@4.0.0-rc.115 @effect/platform-browser@4.0.0-rc.115
+  pnpm add -D vitest@^5.0.0 @effect/vitest@4.0.0-rc.115
+  ```
+
+  `@effect/vitest@4.0.0-rc.115` requires Vitest 5. Upgrade `vitest` and any `@vitest/*` packages together.
+
+- [#1040](https://github.com/foldkit/foldkit/pull/1040) [`c50a8a2`](https://github.com/foldkit/foldkit/commit/c50a8a225a71083c3456d1e2ca39ba97c87e78dd) Thanks [@devinjameson](https://github.com/devinjameson)! - Adds `Subscription.fromEventFilterMapPreventDefault`, the cancelling variant of `Subscription.fromEventFilterMap`. Its `toMessage` returns `Option.some(message)` to mark a dispatch handled. The helper evaluates the mapper, calls `event.preventDefault()`, and queues the Message before the native listener returns; `Option.none()` leaves the default behavior intact. The mapper never calls `preventDefault()` itself, mirroring `h.OnKeyDownPreventDefault` from `foldkit/html`.
+
+  Some browsers default wheel and touch listeners on global targets to passive, where `preventDefault()` is ignored. Because cancelling is the point, the helper registers its listener with `passive: false` when the config does not specify it. Passing `passive: true` explicitly contradicts the helper's purpose and throws at construction.
+
+  The TSDoc for `fromEvent` and `fromEventFilterMap` now explains that `preventDefault()` is ineffective in a passive listener and shows the `options: { passive: false }` fix.
+
+### Patch Changes
+
+- Rebuild with the release's shared tooling configuration so the published packages and website use the same build inputs.
+
+## 0.159.0
+
+### Minor Changes
+
+- [#1377](https://github.com/foldkit/foldkit/pull/1377) [`2ff8b86`](https://github.com/foldkit/foldkit/commit/2ff8b867fde5914b4ad4729127efef15f3dec786) Thanks [@devinjameson](https://github.com/devinjameson)! - Decode each CustomElement event's `detail` against its declared Schema before invoking the event callback. Invalid details are reported to the console and dispatch no Message, Schema transformations run at the browser boundary, and undeclared fields are removed during decoding.
+
+  When a Schema rejects the nullish detail of a payload-less `CustomEvent`, retry with an empty object so `Schema.Struct({})` remains the natural declaration for events without a payload. Schemas that accept the raw nullish value receive it unchanged.
+
+  CustomElement event declarations now require Schemas that decode without Effect services because browser event handlers run synchronously. Replace any decoding-service-dependent event Schema with a service-free decoding boundary Schema; encoding services remain supported.
+
+  `Scene.CustomElement.emit` now accepts the encoded side of the declared event Schema, matching the detail supplied by the browser before runtime decoding.
+
+- [#1377](https://github.com/foldkit/foldkit/pull/1377) [`2ff8b86`](https://github.com/foldkit/foldkit/commit/2ff8b867fde5914b4ad4729127efef15f3dec786) Thanks [@devinjameson](https://github.com/devinjameson)! - Keep `Dialog` open when a file picker inside it is canceled. The dialog now suppresses native `cancel` events and responds only to the distinct cancel signal that `Dom.showDialog` dispatches for an unhandled Escape on the topmost Dialog.
+
+  Add `h.OnCancelPreventDefault` for preventing a native `cancel` event without dispatching a Message, with an optional Message for a synthetic `CustomEvent` signal.
+
+- [#1377](https://github.com/foldkit/foldkit/pull/1377) [`2ff8b86`](https://github.com/foldkit/foldkit/commit/2ff8b867fde5914b4ad4729127efef15f3dec786) Thanks [@devinjameson](https://github.com/devinjameson)! - Add `OnKeyDownSelf` and `OnKeyDownSelfPreventDefault` to `foldkit/html`. They mirror `OnKeyDown` and `OnKeyDownPreventDefault` but fire only when the keydown targets the element itself (`event.target === event.currentTarget`) rather than bubbling up from a descendant. A composite widget that owns the keyboard for a region but embeds interactive children inside it can now ignore the children's keystrokes declaratively. For a contenteditable host the focused element is the host itself, so its own typing fires the handler while keys typed in an embedded input bubble through untouched.
+
+- [#1377](https://github.com/foldkit/foldkit/pull/1377) [`2ff8b86`](https://github.com/foldkit/foldkit/commit/2ff8b867fde5914b4ad4729127efef15f3dec786) Thanks [@devinjameson](https://github.com/devinjameson)! - Add `matchOrElse` to unions returned by `defineTaggedUnion` and `defineRouteUnion`. Selected variants receive narrowed handlers, while inferred calls narrow the fallback to the remaining variants. Both data-first and data-last calls preserve structurally refined input unions.
+
+- [#1377](https://github.com/foldkit/foldkit/pull/1377) [`2ff8b86`](https://github.com/foldkit/foldkit/commit/2ff8b867fde5914b4ad4729127efef15f3dec786) Thanks [@devinjameson](https://github.com/devinjameson)! - Make `OnInput` read from `Contenteditable` hosts. A contenteditable element has no `value`, so previously its `input` events could not be observed declaratively and the host had to masquerade as a form control by defining a `value` getter. `OnInput` now reads the host's rendered text (`innerText`, falling back to `textContent`) when the target has no string `value`, so plain `OnInput` works on a contenteditable host. `OnChange` reads its value the same way. Form controls are unaffected: they still report their `value`.
+
+  Add `OnBeforeInput` and `OnBeforeInputPreventDefault` for editor-grade input on a contenteditable host. Both receive the edit's `inputType` and its `data` as an `Option` (`None` for edits that carry no text, such as most deletions). `OnBeforeInputPreventDefault` returns an `Option<Message>`: `Some` cancels the native edit through `preventDefault` and dispatches, letting update own the document mutation instead of reconciling after the browser has already edited the DOM; `None` lets the native edit proceed. This catches edits that never surface as a keystroke, such as autocorrect and spellcheck replacements. A non-cancelable edit, including some IME composition input, proceeds without dispatching and can be reconciled through `OnInput`.
+
+  The test harness gains `Scene.typeContentEditable` to drive `OnInput` and `Scene.beforeInput` to drive `OnBeforeInput` or `OnBeforeInputPreventDefault` on a contenteditable element.
+
+- [#1377](https://github.com/foldkit/foldkit/pull/1377) [`2ff8b86`](https://github.com/foldkit/foldkit/commit/2ff8b867fde5914b4ad4729127efef15f3dec786) Thanks [@devinjameson](https://github.com/devinjameson)! - Rename the `foldkit/hmr-protocol` export to `foldkit/model-preservation` and correct dev-reload terminology.
+
+  Foldkit's dev-time state preservation serializes the Model, triggers a full page reload, and restores the Model on the fresh boot. That is live reload, not hot module replacement, so the naming now matches the mechanism. The public subpath `foldkit/hmr-protocol` is now `foldkit/model-preservation`, and the `PreserveModelMessage` `isHmrReload` field is now `isReloadFlush`. If you import `foldkit/hmr-protocol` directly, update the specifier to `foldkit/model-preservation`.
+
+- [#1377](https://github.com/foldkit/foldkit/pull/1377) [`2ff8b86`](https://github.com/foldkit/foldkit/commit/2ff8b867fde5914b4ad4729127efef15f3dec786) Thanks [@devinjameson](https://github.com/devinjameson)! - Make the Foldkit server a Web `fetch` handler.
+
+  `ssr.build` no longer takes `entry` pointing at a Node HTTP process or a custom Worker. One `vite build` emits `dist/server/fetch.js` whose default export is `{ fetch }`. Node and Workers both run that module. `handleRequest` in `foldkit/experimental/server` is the shared implementation.
+
+  When another plugin owns the `ssr` environment (workerd), Foldkit still stands down in dev. With `ssr.build` set it stays quiet, because production still needs `ssr.serverEntry`.
+
+  **Migration:** drop `ssr.build.entry` and keep `ssr.serverEntry`. Your Node host is no longer built by `vite build`. Replace it with a script that serves `dist/client` and falls through to `dist/server/fetch.js`, using the SSR example's `scripts/serve.ts` as the reference, and start with `node scripts/serve.ts` instead of `node dist/server/main.js`. A host that imported `dist/server/entry.server.js` now imports `dist/server/fetch.js`, which still exports `renderPage`. A Cloudflare Worker can default-export `fetch.js` directly. `foldkit.build.json` records `fetch.js` as `serverEntry`. The handler trusts `Request.url` as the platform constructed it; a Node adapter resolves the raw request target against its configured origin before calling `fetch`, as `scripts/serve.ts` does.
+
+### Patch Changes
+
+- [#1377](https://github.com/foldkit/foldkit/pull/1377) [`2ff8b86`](https://github.com/foldkit/foldkit/commit/2ff8b867fde5914b4ad4729127efef15f3dec786) Thanks [@devinjameson](https://github.com/devinjameson)! - `Runtime.embed` now reports unhandled startup failures in the console, matching `Runtime.run` and `Runtime.hydrate`, while host disposal and other interrupt-only exits stay quiet. A failing Flags or resource Effect no longer leaves an embedded program blank without explaining why.
+
+## 0.158.2
+
+### Patch Changes
+
+- [#1349](https://github.com/foldkit/foldkit/pull/1349) [`b3901c3`](https://github.com/foldkit/foldkit/commit/b3901c3fe836525893c4d392291a5109928b80ee) Thanks [@devinjameson](https://github.com/devinjameson)! - Republish the website build packages so their artifacts match the shared repository inputs and Vite plugin source used by foldkit.dev.
+
+## 0.158.1
+
+### Patch Changes
+
+- [#1347](https://github.com/foldkit/foldkit/pull/1347) [`9099339`](https://github.com/foldkit/foldkit/commit/90993394590df06ee4413cbbc766b740138f09f2) Thanks [@devinjameson](https://github.com/devinjameson)! - Point the foldkit README, the create-foldkit-app homepage, and the @foldkit/devtools-mcp README at /get-started and /introduction/why-foldkit.
+
+## 0.158.0
+
+### Minor Changes
+
+- [#1287](https://github.com/foldkit/foldkit/pull/1287) [`474b7c6`](https://github.com/foldkit/foldkit/commit/474b7c6d68a5cec68c36b05e635225cf41d93a51) Thanks [@devinjameson](https://github.com/devinjameson)! - Machine Edge handlers now return one `Update.Return`-shaped record with `model` and optional `commands` fields. This replaces the separate Model builder and Commands callback arguments on `to` and `when`, keeps transition outputs consistent with Foldkit update functions, and lets one derivation feed both the next state and its Commands. Migrate by returning `{ model, commands }` from the existing handler and removing the separate Commands callback.
+
+- [#1305](https://github.com/foldkit/foldkit/pull/1305) [`e0a0528`](https://github.com/foldkit/foldkit/commit/e0a0528c239958e6af24ccea356f6ac80d0830e4) Thanks [@devinjameson](https://github.com/devinjameson)! - Add `Machine.ignore()` for explicitly declaring that a guard list should ignore its Message when every preceding `when` guard declines. `Machine.step` reports this outcome as `ExplicitlyIgnored`, and static analysis reports later Edges as `ShadowedByIgnore`.
+
+  This adds an `Ignore` variant to `Machine.GuardedEdge` and variants to `Machine.IgnoredReason` and `Machine.DeadTransitionReason`. Update exhaustive matches over those unions to handle `Ignore`, `ExplicitlyIgnored`, and `ShadowedByIgnore`.
+
+- [#1300](https://github.com/foldkit/foldkit/pull/1300) [`2963bc7`](https://github.com/foldkit/foldkit/commit/2963bc7e16796984f62b5f675d639ee9427751b0) Thanks [@devinjameson](https://github.com/devinjameson)! - Add `Machine.fold`, a dual helper that folds a Machine state field into its enclosing Model.
+
+  The helper supports both data-first update calls and data-last `Update.Step` composition. Contextual Machines read their required context from the enclosing Model for each transition.
+
+- [#997](https://github.com/foldkit/foldkit/pull/997) [`177cfb4`](https://github.com/foldkit/foldkit/commit/177cfb4c02c9c2cdc52e0838e43a76cee4b0e43b) Thanks [@devinjameson](https://github.com/devinjameson)! - The experimental Machine's `Ignored` result now carries a required `reason` field, typed as the new `IgnoredReason` export, so a step that matched no Edge says why. `OutOfAlphabet` means the Message tag appears in no state's `on` record anywhere in the table. `NotApplicable` means the tag is in the Machine's alphabet but no Edge for it exists from the current state. `GuardsFellThrough` means an Edge entry exists for this state and Message but every guard declined and no `otherwise` was present, which previously looked identical to a Message the Machine never handles. Consumers that construct or assert an `Ignored` result must add its `reason`.
+
+- [#1288](https://github.com/foldkit/foldkit/pull/1288) [`3bc16bb`](https://github.com/foldkit/foldkit/commit/3bc16bbc80d817f26bca348c59c6adfb499c58a1) Thanks [@devinjameson](https://github.com/devinjameson)! - Add opt-in, Schema-typed read-only context to experimental Machines. Declare `context` in the first `Machine.define` stage to require it as the third argument to `transition` and `step`, expose it as the third guard parameter, and include it in `EdgeInput`.
+
+  Context-free Machines retain their existing two-argument call signatures and Edge input shape. Use context for per-dispatch reads from data outside the Machine state; keep state-owned snapshots in the state and continue using Messages for values that should be observable facts.
+
+- [#1314](https://github.com/foldkit/foldkit/pull/1314) [`240707a`](https://github.com/foldkit/foldkit/commit/240707af8cafdff65c52bc32c999d37616760033) Thanks [@devinjameson](https://github.com/devinjameson)! - Add `Machine.forStates(...).on(...)` and the Machine definition's `shared` array for declaring one transition map across several source states.
+
+  Shared handlers narrow `state` to the selected state variants and `message` to each transition's Message. State-local transitions replace shared defaults for the same state and Message, while overlapping shared declarations throw when the Machine is defined. Shared transitions are expanded into the Machine's ordinary Edge set before runtime dispatch and static analysis.
+
+- [#1303](https://github.com/foldkit/foldkit/pull/1303) [`420e3e9`](https://github.com/foldkit/foldkit/commit/420e3e91439c8b180e7c3a59259631872b9feae2) Thanks [@devinjameson](https://github.com/devinjameson)! - Export `Machine.StateTransitions` for typing an extracted state entry while preserving its Edge state and Message narrowing.
+
+### Patch Changes
+
+- [#999](https://github.com/foldkit/foldkit/pull/999) [`2494764`](https://github.com/foldkit/foldkit/commit/24947649807bdfe3b81a527d0149bc9ea0165d58) Thanks [@devinjameson](https://github.com/devinjameson)! - `Machine.define` now flattens nested state unions when extracting state tags instead of throwing at module load. A state Schema built as a union of unions, such as `Schema.Union([EnteringPlayers, PlayingState])` where `PlayingState` is itself a union, now works, and `stateTags` lists the tags in depth-first declaration order. Members that are neither a union nor a Struct with a literal `_tag` field still throw the existing error.
+
+- [#1286](https://github.com/foldkit/foldkit/pull/1286) [`79d102e`](https://github.com/foldkit/foldkit/commit/79d102e5315683a2fb275461c1ea461ebd6d4a17) Thanks [@devinjameson](https://github.com/devinjameson)! - Exclude Machine Edges shadowed by an earlier `otherwise` from reachability analysis and report each dead transition once.
+
+## 0.157.0
+
+### Minor Changes
+
+- [#1000](https://github.com/foldkit/foldkit/pull/1000) [`f26af99`](https://github.com/foldkit/foldkit/commit/f26af9919036186f853486ada8db73f13c61c1af) Thanks [@devinjameson](https://github.com/devinjameson)! - `Machine.unreachableStates` and `Machine.deadTransitions` accept an optional array of extra walk roots for entry states the declared Edge set does not reach from `initial`, such as states restored from persistence or entered through deep links. The roots are additive: `initial` is always a root, so passing extra roots can only shrink the findings. The analysis docs now state their assumptions plainly: the results describe the declared Edge set walked from its roots, the walk cannot see state advanced outside `transition` and `step`, and entry points other than `initial` must be passed as extra roots or the analysis reports false positives.
+
+- [#1229](https://github.com/foldkit/foldkit/pull/1229) [`13f4f70`](https://github.com/foldkit/foldkit/commit/13f4f703eb6ab6fdd3b90b1ea9ed09155c01031b) Thanks [@devinjameson](https://github.com/devinjameson)! - Let Mount integrations observe whether the rendered view is `Live` or `Paused` through the new `viewStateChanges` Stream supplied to `Mount.define` and `Mount.defineStream` execution.
+
+  The Stream begins with the rendered view state at the moment the Mount is acquired and stays open for the Mount's lifetime. That initial state is retained across asynchronous setup before the Stream is consumed. A live-acquired Mount that survives a time-travel render stays acquired and observes `Live`, then `Paused`, then `Live` after the latest live view has been patched back into the DOM. A Mount inserted by a replay starts in `Paused`, and a runtime without time travel reports only `Live`.
+
+  A Mount acquired by a historical render cannot dispatch to the live Model. If the resumed live view reuses its element and declares a Mount there, Foldkit releases the replay acquisition before starting the live action with the current args and dispatch. A Mount acquired by the live view stays live so asynchronous setup and external streams can continue; its results follow the latest live Submodel wiring without crossing into historical wiring. Integrations use `viewStateChanges` to stop DOM-derived interaction while the historical view is installed. Commands, Subscriptions, ManagedResources, the live Model, and DevTools history also continue normally.
+
+  This reserves `viewStateChanges` as a runtime-supplied Mount execution field. Rename any Mount arg with that name before upgrading. The low-level `MountAction.f` view-state parameter is now required; MountAction wrappers must accept and forward it.
+
+  Custom renderers without time travel can pass the public `Mount.liveViewStateChanges` Stream to that parameter. It emits `Live` immediately and stays open.
+
+- [#1268](https://github.com/foldkit/foldkit/pull/1268) [`3a4ccd0`](https://github.com/foldkit/foldkit/commit/3a4ccd0f6611f3ef90a5af43a821bbc2d8821fbe) Thanks [@devinjameson](https://github.com/devinjameson)! - Preserve structurally refined payload types in exhaustive Foldkit union matchers, migrate OutMessage folds to their owning union matcher, and add `Animation.toggle` as a child-owned visibility entry point.
+
+- [#1273](https://github.com/foldkit/foldkit/pull/1273) [`62ae446`](https://github.com/foldkit/foldkit/commit/62ae44614013a75af0e649f6ad593ae35a59b131) Thanks [@devinjameson](https://github.com/devinjameson)! - Preserve Message and OutMessage type safety across Story and Scene steps.
+
+  `Story.message`, `Story.expectOutMessage`, `Scene.Subscription.emit`, `Scene.expectOutMessage`, and `Scene.expectOutMessages` are now typed data steps rather than callable simulation transforms. Story and Scene validate those values against the Message and OutMessage types of the update under test, including narrow variants of a wider union.
+
+  ## Migration
+
+  Passing these steps directly to `story` or `scene` is unchanged. Any code that treated one of these returned steps as a function must migrate, including direct invocation, storing it as a simulation transform, or composition through Effect's `flow` or another helper in either Story or Scene.
+
+  Use the new `Story.steps` API for a reusable Story sequence. It accepts the same steps as `story`, preserves their Model, Message, and OutMessage constraints, and can itself be passed anywhere a Story step is accepted.
+
+  Scene has no grouped-step API. Pass `Subscription.emit` and OutMessage assertion steps as separate arguments to `scene`; do not compose them as functions.
+
+  Before:
+
+  ```ts
+  import { flow } from 'effect'
+  import { given, message } from 'foldkit/story'
+
+  const givenIncremented = flow(
+    given({ count: 0 }),
+    message(ClickedIncrement()),
+  )
+  ```
+
+  After:
+
+  ```ts
+  import { given, message, steps } from 'foldkit/story'
+
+  const givenIncremented = steps(
+    given({ count: 0 }),
+    message(ClickedIncrement()),
+  )
+  ```
+
+  Remove the `flow` import when it was used only to group Story steps. This is not a general deprecation of Effect's `flow`; continue to use it for ordinary function composition outside the Story step API.
+
+- [#1269](https://github.com/foldkit/foldkit/pull/1269) [`b5ec356`](https://github.com/foldkit/foldkit/commit/b5ec356d1d88d136f77bca416b753479d4aa7b50) Thanks [@devinjameson](https://github.com/devinjameson)! - Reject children and `h.InnerHTML` passed to `h.textarea` or `h.keyed('textarea')` so the Model remains the field's single source of truth. This is a breaking change: move textarea content into the live value property with `h.Value(text)`. The UI Textarea helper now exposes the narrower `TextareaAttribute` group. Animation wrapper elements and Virtual List row elements also exclude `textarea` because both render children.
+
+### Patch Changes
+
+- [#1250](https://github.com/foldkit/foldkit/pull/1250) [`21d56b2`](https://github.com/foldkit/foldkit/commit/21d56b2de3cdc6a010d1b1e1ac9af56ee1169583) Thanks [@devinjameson](https://github.com/devinjameson)! - Rename the Foldkit philosophy page to “Why Foldkit” and update its URL in the package README.
+
+- [#1213](https://github.com/foldkit/foldkit/pull/1213) [`57e2436`](https://github.com/foldkit/foldkit/commit/57e24366c8997cd235002f58c9dc38477a6cb1a3) Thanks [@devinjameson](https://github.com/devinjameson)! - Use full Effect module names in published source, examples, templates, and documentation. JavaScript and TypeScript globals that share an Effect module name are now qualified through `globalThis`.
+
+- [#1114](https://github.com/foldkit/foldkit/pull/1114) [`1593f90`](https://github.com/foldkit/foldkit/commit/1593f90f783752aba16c9c77a171d3d72f9206df) Thanks [@devinjameson](https://github.com/devinjameson)! - Let a consumer export a Machine Edge built with `to` or `when` from `foldkit/experimental/machine`.
+
+  `Edge` has a hidden field that carries the guard value type. Its key was a `unique symbol` that Foldkit did not export. TypeScript had to write that key into the consumer's `.d.ts` file, but it had no name for it, so it failed with `TS4023: ... has or is using name 'EdgeGuardValueTypeId' ... but cannot be named`. This hit any package that builds an Edge in one module and exports it, as soon as that package turned on declaration emit. `When`, `Otherwise`, and `TransitionTable` embed `Edge`, so exporting any of them hit the same error.
+
+  The key is now a normal property, `'~foldkit/EdgeGuardValue'`, following the same fix as the runtime boot key. Consumers need to do nothing. The field is still internal and still has no runtime representation.
+
+- [#1267](https://github.com/foldkit/foldkit/pull/1267) [`a43f524`](https://github.com/foldkit/foldkit/commit/a43f5241c4f7a6cea57386153863fea9ebf9eab8) Thanks [@devinjameson](https://github.com/devinjameson)! - Move focus into dialogs when the requested initial target is missing or cannot receive focus.
+
 ## 0.156.0
 
 ## 0.155.0
@@ -1433,9 +2055,10 @@
 
   ```ts
   // before
-  const LockScroll = Command.define('LockScroll', CompletedLockScroll)(
-    Dom.lockScroll.pipe(Effect.as(CompletedLockScroll())),
-  )
+  const LockScroll = Command.define(
+    'LockScroll',
+    CompletedLockScroll,
+  )(Dom.lockScroll.pipe(Effect.as(CompletedLockScroll())))
 
   // after
   const LockScroll = Command.define('LockScroll', {
@@ -5777,7 +6400,10 @@ display: none }` rule. Author CSS like Tailwind's `flex` utility class beats
 
   ```ts
   // Before
-  const dialogView = Dialog.lazy({ panelContent: myContent, panelClassName: '...' })
+  const dialogView = Dialog.lazy({
+    panelContent: myContent,
+    panelClassName: '...',
+  })
   dialogView(model.dialog, toParentMessage)
 
   // After

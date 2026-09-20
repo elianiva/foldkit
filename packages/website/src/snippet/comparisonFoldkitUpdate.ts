@@ -3,18 +3,18 @@ import { type Update } from 'foldkit'
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     PressedCell: ({ x, y }) =>
-      M.value(model.tool).pipe(
+      Match.value(model.tool).pipe(
         withUpdateReturn,
-        M.when('Brush', () => ({
-          model: evo(model, {
+        Match.when('Brush', () => ({
+          model: modifyFields(model, {
             grid: () => applyBrush(model, x, y),
             undoStack: () => pushHistory(model.undoStack, model.grid),
             redoStack: () => [],
             isDrawing: () => true,
           }),
         })),
-        M.when('Fill', () => {
-          const nextModel = evo(model, {
+        Match.when('Fill', () => {
+          const nextModel = modifyFields(model, {
             grid: () => applyFill(model, x, y),
             undoStack: () => pushHistory(model.undoStack, model.grid),
             redoStack: () => [],
@@ -27,7 +27,7 @@ export const update = (model: Model, message: Message) =>
       Array.match(model.undoStack, {
         onEmpty: () => ({ model }),
         onNonEmpty: nonEmptyUndoStack => {
-          const nextModel = evo(model, {
+          const nextModel = modifyFields(model, {
             grid: () => Array.lastNonEmpty(nonEmptyUndoStack),
             undoStack: () => Array.initNonEmpty(nonEmptyUndoStack),
             redoStack: Array.append(model.grid),

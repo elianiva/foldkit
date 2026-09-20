@@ -1,17 +1,20 @@
-import { Effect, Schema as S, pipe } from 'effect'
+import { Effect, Schema, pipe } from 'effect'
 import { HttpClient, HttpClientRequest } from 'effect/unstable/http'
 import { AsyncData, Command, Http, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
-const SearchResult = S.Struct({ id: S.String, title: S.String })
+const SearchResult = Schema.Struct({ id: Schema.String, title: Schema.String })
 
-const SearchResultsData = AsyncData.Schema(S.Array(SearchResult), S.String)
+const SearchResultsData = AsyncData.Schema(
+  Schema.Array(SearchResult),
+  Schema.String,
+)
 
 // MODEL
 
-const Model = S.Struct({
-  queryInput: S.String,
+const Model = Schema.Struct({
+  queryInput: Schema.String,
   searchResults: SearchResultsData.schema,
 })
 type Model = typeof Model.Type
@@ -19,10 +22,10 @@ type Model = typeof Model.Type
 // MESSAGE
 
 const Message = defineMessageUnion({
-  UpdatedQuery: { query: S.String },
+  UpdatedQuery: { query: Schema.String },
   SettledSearch: {
-    query: S.String,
-    result: S.Result(S.Array(SearchResult), S.String),
+    query: Schema.String,
+    result: Schema.Result(Schema.Array(SearchResult), Schema.String),
   },
 })
 type Message = typeof Message.Type
@@ -30,7 +33,7 @@ type Message = typeof Message.Type
 // COMMAND
 
 const Search = Command.define('Search', {
-  args: { query: S.String },
+  args: { query: Schema.String },
   messages: [Message.SettledSearch],
   execute: ({ query }) =>
     pipe(
@@ -40,7 +43,7 @@ const Search = Command.define('Search', {
           HttpClientRequest.setUrlParams({ q: query }),
         )
         const response = yield* client.execute(request)
-        return yield* S.decodeUnknownEffect(S.Array(SearchResult))(
+        return yield* Schema.decodeUnknownEffect(Schema.Array(SearchResult))(
           yield* response.json,
         )
       }),
@@ -56,7 +59,7 @@ const Search = Command.define('Search', {
 const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     UpdatedQuery: ({ query }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         queryInput: () => query,
         searchResults: () => SearchResultsData.Loading(),
       }),
@@ -67,6 +70,8 @@ const update = (model: Model, message: Message) =>
       if (query !== model.queryInput) {
         return { model }
       }
-      return { model: evo(model, { searchResults: AsyncData.settle(result) }) }
+      return {
+        model: modifyFields(model, { searchResults: AsyncData.settle(result) }),
+      }
     },
   })

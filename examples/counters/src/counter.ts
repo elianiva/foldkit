@@ -1,13 +1,13 @@
-import { Schema as S } from 'effect'
+import { Schema } from 'effect'
 import { Submodel, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { Button } from '@foldkit/ui'
 
 // MODEL
 
-export const Model = S.Struct({ count: S.Number })
+export const Model = Schema.Struct({ count: Schema.Number })
 export type Model = typeof Model.Type
 
 export const init: Model = { count: 0 }
@@ -26,10 +26,10 @@ export type Message = typeof Message.Type
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     ClickedDecrement: () => ({
-      model: evo(model, { count: count => count - 1 }),
+      model: modifyFields(model, { count: count => count - 1 }),
     }),
     ClickedIncrement: () => ({
-      model: evo(model, { count: count => count + 1 }),
+      model: modifyFields(model, { count: count => count + 1 }),
     }),
   })
 

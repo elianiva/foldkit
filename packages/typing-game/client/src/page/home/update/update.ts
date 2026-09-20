@@ -1,6 +1,6 @@
-import { Array, Match as M, Option, String as Str } from 'effect'
+import { Array, Match, Option, String } from 'effect'
 import { type Update } from 'foldkit'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { optionWhen } from '../../../optionWhen'
 import { RoomsClient } from '../../../rpc'
@@ -15,7 +15,7 @@ export type UpdateReturn = Update.ReturnWithOutMessage<
   OutMessage,
   RoomsClient
 >
-const withUpdateReturn = M.withReturnType<UpdateReturn>()
+const withUpdateReturn = Match.withReturnType<UpdateReturn>()
 
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
@@ -24,11 +24,11 @@ export const update = (model: Model, message: Message) =>
     CompletedFocusRoomIdInput: () => ({ model }),
 
     SubmittedUsernameForm: () =>
-      M.value(model.homeStep).pipe(
+      Match.value(model.homeStep).pipe(
         withUpdateReturn,
-        M.tag('EnterUsername', ({ username }) => {
-          const nextModel = Str.isNonEmpty(username)
-            ? evo(model, {
+        Match.tag('EnterUsername', ({ username }) => {
+          const nextModel = String.isNonEmpty(username)
+            ? modifyFields(model, {
                 homeStep: () =>
                   HomeStep.SelectAction({
                     username,
@@ -39,21 +39,21 @@ export const update = (model: Model, message: Message) =>
 
           return { model: nextModel }
         }),
-        M.orElse(() => ({ model })),
+        Match.orElse(() => ({ model })),
       ),
 
     PressedKey: message => handleKeyPressed(model)(message),
 
     ChangedUsername: ({ value }) =>
-      M.value(model.homeStep).pipe(
+      Match.value(model.homeStep).pipe(
         withUpdateReturn,
-        M.tag('EnterUsername', () => ({
-          model: evo(model, {
+        Match.tag('EnterUsername', () => ({
+          model: modifyFields(model, {
             homeStep: () => HomeStep.EnterUsername({ username: value }),
             formError: () => Option.none(),
           }),
         })),
-        M.orElse(() => ({ model })),
+        Match.orElse(() => ({ model })),
       ),
 
     BlurredUsernameInput: () => ({ model, commands: [FocusUsernameInput()] }),
@@ -61,10 +61,10 @@ export const update = (model: Model, message: Message) =>
     BlurredRoomIdInput: () => ({ model, commands: [FocusRoomIdInput()] }),
 
     ChangedRoomId: ({ value }) =>
-      M.value(model.homeStep).pipe(
+      Match.value(model.homeStep).pipe(
         withUpdateReturn,
-        M.tag('EnterRoomId', ({ username }) => ({
-          model: evo(model, {
+        Match.tag('EnterRoomId', ({ username }) => ({
+          model: modifyFields(model, {
             homeStep: () =>
               HomeStep.EnterRoomId({
                 username,
@@ -73,16 +73,16 @@ export const update = (model: Model, message: Message) =>
             formError: () => Option.none(),
           }),
         })),
-        M.orElse(() => ({ model })),
+        Match.orElse(() => ({ model })),
       ),
 
     SubmittedJoinRoomForm: () =>
-      M.value(model.homeStep).pipe(
+      Match.value(model.homeStep).pipe(
         withUpdateReturn,
-        M.tag('EnterRoomId', ({ username, roomId }) => {
+        Match.tag('EnterRoomId', ({ username, roomId }) => {
           if (roomId === 'exit') {
             return {
-              model: evo(model, {
+              model: modifyFields(model, {
                 homeStep: () =>
                   HomeStep.SelectAction({
                     username,
@@ -92,13 +92,13 @@ export const update = (model: Model, message: Message) =>
             }
           }
 
-          const maybeJoin = optionWhen(Str.isNonEmpty(roomId), () =>
+          const maybeJoin = optionWhen(String.isNonEmpty(roomId), () =>
             JoinRoom({ username, roomId }),
           )
 
           return { model, commands: Array.fromOption(maybeJoin) }
         }),
-        M.orElse(() => ({ model })),
+        Match.orElse(() => ({ model })),
       ),
 
     SucceededCreateRoom: ({ roomId, player }) => ({
@@ -112,13 +112,13 @@ export const update = (model: Model, message: Message) =>
     }),
 
     FailedCreateRoom: ({ error }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         formError: () => Option.some(error),
       }),
     }),
 
     FailedJoinRoom: ({ error }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         formError: () => Option.some(error),
       }),
     }),

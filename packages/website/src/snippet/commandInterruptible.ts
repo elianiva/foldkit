@@ -1,23 +1,23 @@
-import { Array, Effect, Schema as S } from 'effect'
+import { Array, Effect, Schema } from 'effect'
 import { Command, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 const Message = defineMessageUnion({
-  ClickedCancelUpload: { uploadId: S.Number },
-  SucceededUploadFile: { uploadId: S.Number },
-  FailedUploadFile: { uploadId: S.Number },
+  ClickedCancelUpload: { uploadId: Schema.Number },
+  SucceededUploadFile: { uploadId: Schema.Number },
+  FailedUploadFile: { uploadId: Schema.Number },
   CompletedCancelUploadFile: {
-    uploadId: S.Number,
+    uploadId: Schema.Number,
     outcome: Command.Interruptible.Outcome,
   },
 })
 
-const UploadKey = S.Struct({ uploadId: S.Number })
+const UploadKey = Schema.Struct({ uploadId: Schema.Number })
 type UploadKey = typeof UploadKey.Type
 
 const UploadFile = Command.define('UploadFile', {
-  args: { ...UploadKey.fields, file: S.instanceOf(File) },
+  args: { ...UploadKey.fields, file: Schema.instanceOf(File) },
   messages: [Message.SucceededUploadFile, Message.FailedUploadFile],
   // The key function maps args to what distinguishes invocations. Foldkit
   // prefixes the Command name automatically, so the full key for upload 7
@@ -37,7 +37,9 @@ const UploadFile = Command.define('UploadFile', {
 
 const setStatusForId = (uploadId: number, status: UploadStatus) =>
   Array.map((upload: Upload) =>
-    upload.id === uploadId ? evo(upload, { status: () => status }) : upload,
+    upload.id === uploadId
+      ? modifyFields(upload, { status: () => status })
+      : upload,
   )
 
 type UpdateReturn = Update.Return<Model, Message>
@@ -58,7 +60,7 @@ const update = (model: Model, message: Message) =>
         // The upload was stopped. Its result Message will never arrive,
         // so this branch owns the state transition.
         Interrupted: () => ({
-          model: evo(model, {
+          model: modifyFields(model, {
             uploads: setStatusForId(uploadId, 'Cancelled'),
           }),
         }),
@@ -67,9 +69,11 @@ const update = (model: Model, message: Message) =>
         NotFound: () => ({ model }),
       }),
     SucceededUploadFile: ({ uploadId }) => ({
-      model: evo(model, { uploads: setStatusForId(uploadId, 'Done') }),
+      model: modifyFields(model, { uploads: setStatusForId(uploadId, 'Done') }),
     }),
     FailedUploadFile: ({ uploadId }) => ({
-      model: evo(model, { uploads: setStatusForId(uploadId, 'Failed') }),
+      model: modifyFields(model, {
+        uploads: setStatusForId(uploadId, 'Failed'),
+      }),
     }),
   })

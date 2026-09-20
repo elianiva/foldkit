@@ -1,6 +1,6 @@
-import { Effect, Schema as S } from 'effect'
+import { Effect, Schema } from 'effect'
 import { Command, Port } from 'foldkit'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 
 import { CompletedReportCount } from './message'
 import { ports } from './ports'
@@ -9,7 +9,7 @@ import { ports } from './ports'
 // and delivers it to every host listener; the Command acknowledges with a
 // Completed* Message like any other fire-and-forget Command.
 export const ReportCount = Command.define('ReportCount', {
-  args: { count: S.Number },
+  args: { count: Schema.Number },
   messages: [CompletedReportCount],
   execute: ({ count }) =>
     Port.emit(ports.outbound.countChanged, count).pipe(
@@ -21,7 +21,7 @@ export const ReportCount = Command.define('ReportCount', {
 const handleAdvance = (model: Model): UpdateReturn => {
   const count = model.count + model.step
   return {
-    model: evo(model, { count: () => count }),
+    model: modifyFields(model, { count: () => count }),
     commands: [ReportCount({ count })],
   }
 }

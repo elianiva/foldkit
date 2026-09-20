@@ -1,18 +1,10 @@
-import {
-  Array,
-  Effect,
-  Match as M,
-  Option,
-  Schema as S,
-  String,
-  pipe,
-} from 'effect'
+import { Array, Effect, Match, Option, Schema, String, pipe } from 'effect'
 import { type Update } from 'foldkit'
 import * as Command from 'foldkit/command'
 import * as Dom from 'foldkit/dom'
 import { type ChildAttribute, type Html, childAttributes } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { type View as SubmodelView, defineView } from 'foldkit/submodel'
 
 import { idSelector } from '../internal/selectors.js'
@@ -23,11 +15,11 @@ export { wrapIndex, findFirstEnabledIndex, keyToIndex } from '../keyboard.js'
 // MODEL
 
 /** Controls the tab list layout direction and which arrow keys navigate between tabs. */
-export const Orientation = S.Literals(['Horizontal', 'Vertical'])
+export const Orientation = Schema.Literals(['Horizontal', 'Vertical'])
 export type Orientation = typeof Orientation.Type
 
 /** Controls whether tabs activate on focus (`Automatic`) or require an explicit selection (`Manual`). */
-export const ActivationMode = S.Literals(['Automatic', 'Manual'])
+export const ActivationMode = Schema.Literals(['Automatic', 'Manual'])
 export type ActivationMode = typeof ActivationMode.Type
 
 /** Schema for the tabs component's private interaction state. The active
@@ -35,9 +27,9 @@ export type ActivationMode = typeof ActivationMode.Type
  *  so it is not stored here. `maybeFocusedIndex` is the roving-tabindex
  *  cursor: `None` means keyboard focus follows the selected tab, and `Manual`
  *  activation stores `Some(index)` while focus diverges from the selection. */
-export const Model = S.Struct({
-  id: S.String,
-  maybeFocusedIndex: S.Option(S.Number),
+export const Model = Schema.Struct({
+  id: Schema.String,
+  maybeFocusedIndex: Schema.Option(Schema.Number),
   activationMode: ActivationMode,
 })
 
@@ -48,10 +40,10 @@ export type Model = typeof Model.Type
 /** Union of all messages the tabs component can produce. */
 export const Message = defineMessageUnion({
   SelectedTab: {
-    index: S.Number,
-    value: S.String,
+    index: Schema.Number,
+    value: Schema.String,
   },
-  FocusedTab: { index: S.Number },
+  FocusedTab: { index: Schema.Number },
   CompletedFocusTab: {},
 })
 
@@ -72,8 +64,8 @@ export type Selected<Value extends string = string> = Readonly<{
  *  `Update.foldChild` config handles them through `foldOutMessage`. */
 export const OutMessage = defineMessageUnion({
   Selected: {
-    value: S.String,
-    index: S.Number,
+    value: Schema.String,
+    index: Schema.Number,
   },
 })
 
@@ -107,7 +99,7 @@ const tabPanelId = (id: string, index: number): string => `${id}-panel-${index}`
 
 /** Moves focus to the tab at the given index. */
 export const FocusTab = Command.define('FocusTab', {
-  args: { id: S.String, index: S.Number },
+  args: { id: Schema.String, index: Schema.Number },
   messages: [Message.CompletedFocusTab],
   execute: ({ id, index }) =>
     Dom.focus(idSelector(tabId(id, index))).pipe(
@@ -125,12 +117,14 @@ type UpdateReturn = Update.ReturnWithOutMessage<Model, Message, OutMessage>
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     SelectedTab: ({ index, value }) => ({
-      model: evo(model, { maybeFocusedIndex: () => Option.none() }),
+      model: modifyFields(model, { maybeFocusedIndex: () => Option.none() }),
       commands: [FocusTab({ id: model.id, index })],
       outMessage: OutMessage.Selected({ value, index }),
     }),
     FocusedTab: ({ index }) => ({
-      model: evo(model, { maybeFocusedIndex: () => Option.some(index) }),
+      model: modifyFields(model, {
+        maybeFocusedIndex: () => Option.some(index),
+      }),
       commands: [FocusTab({ id: model.id, index })],
     }),
     CompletedFocusTab: () => ({ model }),
@@ -167,6 +161,12 @@ export type RenderInfo<Value extends string = string> = Readonly<{
   activeIndex: number
 }>
 
+/** Describes whether a consumer renders only the active tab panel or keeps
+ *  every panel mounted and hides inactive ones. Tab-to-panel references follow
+ *  the rendered panel strategy. */
+export const PanelMount = Schema.Literals(['ActiveOnly', 'All'])
+export type PanelMount = typeof PanelMount.Type
+
 /** Per-render view inputs passed to `view` via `h.submodel`'s `viewInputs` field.
  *  Generic over `Value extends string` so consumers using
  *  `Tabs.create<MyUnion>()` receive `tab.value: MyUnion` in `toView`
@@ -175,7 +175,10 @@ export type RenderInfo<Value extends string = string> = Readonly<{
  *
  *  - `selectedValue`: the active tab, read straight from the parent Model.
  *    `aria-selected`, the `data-selected` marker, and which panel is active
- *    all derive from it. */
+ *    all derive from it.
+ *  - `panelMount`: defaults to `ActiveOnly`, where the consumer renders only
+ *    the active panel. Set `All` when the consumer keeps every panel mounted
+ *    and hides inactive ones, so every tab retains its panel relationship. */
 export type ViewInputs<Value extends string = string> = Readonly<{
   tabs: ReadonlyArray<Value>
   selectedValue: Value
@@ -183,6 +186,7 @@ export type ViewInputs<Value extends string = string> = Readonly<{
   toView: (render: RenderInfo<Value>) => Html
   isTabDisabled?: (value: Value, index: number) => boolean
   orientation?: Orientation
+  panelMount?: PanelMount
 }>
 
 const internalView = defineView<Model, Message, ViewInputs>(
@@ -195,6 +199,7 @@ const internalView = defineView<Model, Message, ViewInputs>(
       toView,
       isTabDisabled,
       orientation = 'Horizontal',
+      panelMount = 'ActiveOnly',
     } = viewInputs
 
     const activeIndex = pipe(
@@ -217,16 +222,16 @@ const internalView = defineView<Model, Message, ViewInputs>(
         Option.exists(tab => isTabDisabled(tab, index)),
       )
 
-    const { nextKey, previousKey } = M.value(orientation).pipe(
-      M.when('Horizontal', () => ({
+    const { nextKey, previousKey } = Match.value(orientation).pipe(
+      Match.when('Horizontal', () => ({
         nextKey: 'ArrowRight',
         previousKey: 'ArrowLeft',
       })),
-      M.when('Vertical', () => ({
+      Match.when('Vertical', () => ({
         nextKey: 'ArrowDown',
         previousKey: 'ArrowUp',
       })),
-      M.exhaustive,
+      Match.exhaustive,
     )
 
     const resolveKeyIndex = keyToIndex(
@@ -245,8 +250,8 @@ const internalView = defineView<Model, Message, ViewInputs>(
       )
 
     const handleAutomaticKeyDown = (key: string): Option.Option<SelectedTab> =>
-      M.value(key).pipe(
-        M.whenOr(
+      Match.value(key).pipe(
+        Match.whenOr(
           nextKey,
           previousKey,
           'Home',
@@ -255,15 +260,15 @@ const internalView = defineView<Model, Message, ViewInputs>(
           'PageDown',
           () => tabSelectedAt(resolveKeyIndex(key)),
         ),
-        M.whenOr('Enter', ' ', () => tabSelectedAt(focusedIndex)),
-        M.orElse(() => Option.none()),
+        Match.whenOr('Enter', ' ', () => tabSelectedAt(focusedIndex)),
+        Match.orElse(() => Option.none()),
       )
 
     const handleManualKeyDown = (
       key: string,
     ): Option.Option<SelectedTab | FocusedTab> =>
-      M.value(key).pipe(
-        M.whenOr(
+      Match.value(key).pipe(
+        Match.whenOr(
           nextKey,
           previousKey,
           'Home',
@@ -273,17 +278,17 @@ const internalView = defineView<Model, Message, ViewInputs>(
           () =>
             Option.some(Message.FocusedTab({ index: resolveKeyIndex(key) })),
         ),
-        M.whenOr('Enter', ' ', () => tabSelectedAt(focusedIndex)),
-        M.orElse(() => Option.none()),
+        Match.whenOr('Enter', ' ', () => tabSelectedAt(focusedIndex)),
+        Match.orElse(() => Option.none()),
       )
 
     const handleKeyDown = (
       key: string,
     ): Option.Option<SelectedTab | FocusedTab> =>
-      M.value(activationMode).pipe(
-        M.when('Automatic', () => handleAutomaticKeyDown(key)),
-        M.when('Manual', () => handleManualKeyDown(key)),
-        M.exhaustive,
+      Match.value(activationMode).pipe(
+        Match.when('Automatic', () => handleAutomaticKeyDown(key)),
+        Match.when('Manual', () => handleManualKeyDown(key)),
+        Match.exhaustive,
       )
 
     const tabInfos: ReadonlyArray<TabInfo> = Array.map(tabs, (value, index) => {
@@ -296,7 +301,9 @@ const internalView = defineView<Model, Message, ViewInputs>(
         h.Role('tab'),
         h.Type('button'),
         h.AriaSelected(isActive),
-        h.AriaControls(tabPanelId(id, index)),
+        ...(isActive || panelMount === 'All'
+          ? [h.AriaControls(tabPanelId(id, index))]
+          : []),
         h.Tabindex(isFocused ? 0 : -1),
         ...(isActive ? [h.DataAttribute('selected', '')] : []),
         ...(isTabDisabledNow

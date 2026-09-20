@@ -1,33 +1,38 @@
 import { clsx } from 'clsx'
 import {
   Array,
+  Deferred,
   Effect,
-  Fiber,
-  Match as M,
+  FiberMap,
+  Match,
   Option,
   Order,
   Queue,
   Record,
-  Schema as S,
+  Schema,
   Stream,
-  String as String_,
+  String,
   pipe,
 } from 'effect'
 import { Command, ManagedResource, Mount, Submodel, Update } from 'foldkit'
 import { Html, type HtmlBuilder, inertHtml as ih } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import filesBySlug from 'virtual:playground-files'
 import playgroundTypes from 'virtual:playground-types'
 
 import { Tabs } from '@foldkit/ui'
-import type { FileSystemTree, WebContainer } from '@webcontainer/api'
 
 import { Icon } from '../icon'
 import { exampleDetailRouter, examplesRouter } from '../route'
 import { type ExampleMeta, findBySlug } from './example/meta'
 import * as PlaygroundPreview from './playgroundPreview'
+import {
+  type PlaygroundWebContainer,
+  acquirePlaygroundWebContainer,
+  reasonFromError,
+} from './playgroundWebContainer'
 
 // MODEL
 
@@ -35,41 +40,42 @@ const PlaygroundState = defineTaggedUnion({
   Idle: {},
   Booting: {},
   Booted: { preview: PlaygroundPreview.State },
-  Failed: { reason: S.String },
+  Failed: { reason: Schema.String },
 })
 type PlaygroundState = typeof PlaygroundState.Type
 
-export const Model = S.Struct({
-  slug: S.String,
+export const Model = Schema.Struct({
+  slug: Schema.String,
   state: PlaygroundState,
-  files: S.Record(S.String, S.String),
+  files: Schema.Record(Schema.String, Schema.String),
   fileTabs: Tabs.Model,
-  activeFilePath: S.String,
+  activeFilePath: Schema.String,
   // NOTE: Paths edited before the WebContainer finished booting. Writes
   // dispatched at that time fail with `ResourceNotAvailable`, so we
   // accumulate the paths here and flush them once `BootedPlayground`
   // fires.
-  dirtyPaths: S.Array(S.String),
+  dirtyPaths: Schema.Array(Schema.String),
   // NOTE: Surfaced as a banner when set. Cleared on `BootedPlayground`
   // and on each successful write schedule, so transient errors don't
   // linger after recovery.
-  lastWriteError: S.Option(S.String),
+  lastWriteError: Schema.Option(Schema.String),
 })
 export type Model = typeof Model.Type
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  BootedPlayground: { previewUrl: S.String },
-  FailedBootPlayground: { reason: S.String },
+  BootedPlayground: { previewUrl: Schema.String },
+  FailedBootPlayground: { reason: Schema.String },
   ReleasedPlayground: {},
-  LoadedPlaygroundPreview: { previewUrl: S.String },
+  LoadedPlaygroundPreview: { previewUrl: Schema.String },
   GotFileTabsMessage: { message: Tabs.Message },
-  EditedPlaygroundFile: { path: S.String, content: S.String },
+  EditedPlaygroundFile: { path: Schema.String, content: Schema.String },
   SucceededMountPlaygroundEditor: {},
-  FailedMountPlaygroundEditor: { reason: S.String },
+  FailedMountPlaygroundEditor: { reason: Schema.String },
   ScheduledWritePlaygroundFile: {},
-  FailedWritePlaygroundFile: { reason: S.String },
+  FailedWritePlaygroundFile: { reason: Schema.String },
+  CompletedWaitForPlaygroundServerFailure: { reason: Schema.String },
 })
 export type Message = typeof Message.Type
 
@@ -115,157 +121,36 @@ export const init = (slug: string): Model => {
 
 // MANAGED RESOURCE
 
-// NOTE: `pendingWrites` is a per-path map of in-flight debounced write
-// fibers. A new write for a path interrupts the prior one, so a burst
-// of keystrokes collapses to a single fs write + Tailwind HMR nudge per
-// path. The map lives on the resource so it gets cleared on release.
-const WebContainerPlayground = ManagedResource.tag<{
-  container: WebContainer
-  previewUrl: string
-  pendingWrites: Map<string, Fiber.Fiber<void, never>>
-}>()('WebContainerPlayground')
+const WebContainerPlayground = ManagedResource.tag<PlaygroundWebContainer>()(
+  'WebContainerPlayground',
+)
 
 export type WebContainerPlaygroundService = ManagedResource.ServiceOf<
   typeof WebContainerPlayground
 >
 
-const PlaygroundParams = S.Struct({ slug: S.String })
-
-const fileSystemTreeFromFiles = (
-  files: Readonly<Record<string, string>>,
-): FileSystemTree => {
-  const tree: FileSystemTree = {}
-  for (const [path, contents] of Object.entries(files)) {
-    const segments = path.split('/')
-    const fileName = segments.pop()
-    if (fileName === undefined) {
-      continue
-    }
-    let cursor: FileSystemTree = tree
-    for (const segment of segments) {
-      const existing = cursor[segment]
-      if (existing === undefined) {
-        const directory: FileSystemTree = {}
-        cursor[segment] = { directory }
-        cursor = directory
-      } else if ('directory' in existing) {
-        cursor = existing.directory
-      } else {
-        throw new Error(
-          `Playground file tree conflict: ${segment} is both a file and a directory`,
-        )
-      }
-    }
-    cursor[fileName] = { file: { contents } }
-  }
-  return tree
-}
-
-const reasonFromError = (error: unknown): string => {
-  if (error instanceof Error) {
-    if (error.cause instanceof Error) {
-      return `${error.message}: ${error.cause.message}`
-    }
-    return error.message
-  }
-  return String(error)
-}
+const PlaygroundParams = Schema.Struct({ slug: Schema.String })
 
 export const managedResources = ManagedResource.make<Model, Message>()(
   entry => ({
-    webContainerPlayground: entry(S.Option(PlaygroundParams), {
+    webContainerPlayground: entry(Schema.Option(PlaygroundParams), {
       resource: WebContainerPlayground,
-      modelToMaybeRequirements: ({ slug }) =>
-        pipe(
-          slug,
-          Option.liftPredicate(() => Record.has(filesBySlug, slug)),
-          Option.map(() => ({ slug })),
-        ),
+      modelToMaybeRequirements: ({ slug, state }) =>
+        state._tag === 'Failed' || state._tag === 'Idle'
+          ? Option.none()
+          : pipe(
+              slug,
+              Option.liftPredicate(() => Record.has(filesBySlug, slug)),
+              Option.map(() => ({ slug })),
+            ),
       acquire: ({ slug }) =>
         Effect.gen(function* () {
           const fileEntry = yield* Effect.fromOption(
             Record.get(filesBySlug, slug),
           )
-          const { WebContainer } = yield* Effect.tryPromise(
-            () => import('@webcontainer/api'),
-          )
-          const container = yield* Effect.tryPromise(() =>
-            WebContainer.boot({
-              coep: 'credentialless',
-              workdirName: 'foldkit',
-            }),
-          )
-          yield* Effect.tryPromise(() =>
-            container.mount(fileSystemTreeFromFiles(fileEntry.files)),
-          )
-          const install = yield* Effect.tryPromise(() =>
-            container.spawn('npm', ['install']),
-          )
-          let installOutput = ''
-          void install.output.pipeTo(
-            new WritableStream({
-              write: data => {
-                installOutput += data
-              },
-            }),
-          )
-          const installExitCode = yield* Effect.tryPromise(() => install.exit)
-          if (installExitCode !== 0) {
-            return yield* Effect.fail(
-              new Error(
-                `npm install exited with code ${installExitCode}:\n${installOutput}`,
-              ),
-            )
-          }
-          const dev = yield* Effect.tryPromise(() =>
-            container.spawn('npm', ['run', 'dev']),
-          )
-          let devOutput = ''
-          void dev.output.pipeTo(
-            new WritableStream({
-              write: data => {
-                devOutput += data
-              },
-            }),
-          )
-          const previewUrl = yield* Effect.callback<string, Error>(
-            (resume, signal) => {
-              let settled = false
-              const settle = (effect: Effect.Effect<string, Error>): void => {
-                if (settled) {
-                  return
-                }
-                settled = true
-                resume(effect)
-              }
-              const unsubscribe = container.on('server-ready', (_port, url) =>
-                settle(Effect.succeed(url)),
-              )
-              void dev.exit.then(code =>
-                settle(
-                  Effect.fail(
-                    new Error(
-                      `npm run dev exited with code ${code} before the dev server was ready:\n${devOutput}`,
-                    ),
-                  ),
-                ),
-              )
-              signal.addEventListener('abort', unsubscribe)
-            },
-          )
-          return {
-            container,
-            previewUrl,
-            pendingWrites: new Map<string, Fiber.Fiber<void, never>>(),
-          }
+          return yield* acquirePlaygroundWebContainer(fileEntry.files)
         }),
-      release: ({ container, pendingWrites }) =>
-        Effect.gen(function* () {
-          for (const fiber of pendingWrites.values()) {
-            yield* Fiber.interrupt(fiber)
-          }
-          yield* Effect.sync(() => container.teardown())
-        }),
+      release: () => Effect.void,
       onAcquired: ({ previewUrl }) => Message.BootedPlayground({ previewUrl }),
       onReleased: () => Message.ReleasedPlayground(),
       onAcquireError: error =>
@@ -279,18 +164,18 @@ export const managedResources = ManagedResource.make<Model, Message>()(
 const monacoLanguageForPath = (path: string): string =>
   pipe(
     path,
-    String_.lastIndexOf('.'),
+    String.lastIndexOf('.'),
     Option.match({
       onNone: () => 'plaintext',
       onSome: dotIndex =>
-        M.value(path.slice(dotIndex)).pipe(
-          M.when('.ts', () => 'typescript'),
-          M.when('.tsx', () => 'typescript'),
-          M.when('.js', () => 'javascript'),
-          M.when('.html', () => 'html'),
-          M.when('.css', () => 'css'),
-          M.when('.json', () => 'json'),
-          M.orElse(() => 'plaintext'),
+        Match.value(path.slice(dotIndex)).pipe(
+          Match.when('.ts', () => 'typescript'),
+          Match.when('.tsx', () => 'typescript'),
+          Match.when('.js', () => 'javascript'),
+          Match.when('.html', () => 'html'),
+          Match.when('.css', () => 'css'),
+          Match.when('.json', () => 'json'),
+          Match.orElse(() => 'plaintext'),
         ),
     }),
   )
@@ -456,7 +341,7 @@ const acquirePlaygroundEditor = <E>(
       theme: FOLDKIT_DARK_THEME,
       automaticLayout: true,
       fontSize: 13,
-      fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+      fontFamily: 'Paper Mono, ui-monospace, monospace',
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
       tabSize: 2,
@@ -499,13 +384,22 @@ const streamPlaygroundEditorMessages = (
   path: string,
   initialContent: string,
   files: Readonly<Record<string, string>>,
+  viewStateChanges: Stream.Stream<Mount.ViewState>,
 ) =>
   Stream.callback<PlaygroundEditorMessage>(queue =>
     Effect.acquireRelease(
       acquirePlaygroundEditor(queue, element, path, initialContent, files),
       releasePlaygroundEditor,
     ).pipe(
-      Effect.flatMap(() => Effect.never),
+      Effect.flatMap(({ editor }) =>
+        viewStateChanges.pipe(
+          Stream.runForEach(viewState =>
+            Effect.sync(() =>
+              editor.updateOptions({ readOnly: viewState === 'Paused' }),
+            ),
+          ),
+        ),
+      ),
       Effect.catch(error =>
         Effect.sync(() => {
           Queue.offerUnsafe(
@@ -519,19 +413,25 @@ const streamPlaygroundEditorMessages = (
     ),
   )
 
-const PlaygroundEditor = Mount.defineStream('PlaygroundEditor', {
+export const PlaygroundEditor = Mount.defineStream('PlaygroundEditor', {
   args: {
-    path: S.String,
-    initialContent: S.String,
-    files: S.Record(S.String, S.String),
+    path: Schema.String,
+    initialContent: Schema.String,
+    files: Schema.Record(Schema.String, Schema.String),
   },
   messages: [
     Message.SucceededMountPlaygroundEditor,
     Message.FailedMountPlaygroundEditor,
     Message.EditedPlaygroundFile,
   ],
-  execute: ({ element, path, initialContent, files }) =>
-    streamPlaygroundEditorMessages(element, path, initialContent, files),
+  execute: ({ element, path, initialContent, files, viewStateChanges }) =>
+    streamPlaygroundEditorMessages(
+      element,
+      path,
+      initialContent,
+      files,
+      viewStateChanges,
+    ),
 })
 
 // COMMAND
@@ -545,8 +445,27 @@ const STYLES_CSS_PATH = 'src/styles.css'
 
 const WRITE_DEBOUNCE_MILLIS = 250
 
+export const WaitForPlaygroundServerFailure = Command.define(
+  'WaitForPlaygroundServerFailure',
+  {
+    messages: [Message.CompletedWaitForPlaygroundServerFailure],
+    execute: Effect.gen(function* () {
+      const { serverFailure } = yield* WebContainerPlayground.get
+      return yield* Deferred.await(serverFailure).pipe(
+        Effect.catch(error =>
+          Effect.succeed(
+            Message.CompletedWaitForPlaygroundServerFailure({
+              reason: reasonFromError(error),
+            }),
+          ),
+        ),
+      )
+    }).pipe(Effect.catchTag('ResourceNotAvailable', () => Effect.interrupt)),
+  },
+)
+
 export const WritePlaygroundFile = Command.define('WritePlaygroundFile', {
-  args: { path: S.String, content: S.String },
+  args: { path: Schema.String, content: Schema.String },
   messages: [
     Message.ScheduledWritePlaygroundFile,
     Message.FailedWritePlaygroundFile,
@@ -554,11 +473,9 @@ export const WritePlaygroundFile = Command.define('WritePlaygroundFile', {
   execute: ({ path, content }) =>
     Effect.gen(function* () {
       const { container, pendingWrites } = yield* WebContainerPlayground.get
-      const existing = pendingWrites.get(path)
-      if (existing !== undefined) {
-        yield* Fiber.interrupt(existing)
-      }
-      const fiber = yield* pipe(
+      yield* FiberMap.run(
+        pendingWrites,
+        path,
         Effect.gen(function* () {
           yield* Effect.sleep(WRITE_DEBOUNCE_MILLIS)
           yield* Effect.tryPromise(() => container.fs.writeFile(path, content))
@@ -570,24 +487,16 @@ export const WritePlaygroundFile = Command.define('WritePlaygroundFile', {
               container.fs.writeFile(STYLES_CSS_PATH, stylesContent),
             )
           }
-          pendingWrites.delete(path)
-        }),
-        // NOTE: Errors in the debounced write fiber can't reach the parent
-        // Command's return value (the Command already returned
-        // `Scheduled…` synchronously). We log so dev failures aren't
-        // entirely invisible; a Tailwind/HMR storm or container crash
-        // will appear in the console.
-        Effect.catch(error =>
-          Effect.sync(() => {
-            console.error(
+        }).pipe(
+          Effect.catch(error =>
+            Effect.logError(
               `[playground] Debounced write failed for ${path}:`,
               error,
-            )
-          }),
+            ),
+          ),
         ),
-        Effect.forkDetach,
+        { startImmediately: true },
       )
-      pendingWrites.set(path, fiber)
       return Message.ScheduledWritePlaygroundFile()
     }).pipe(
       Effect.catchTag('ResourceNotAvailable', () =>
@@ -630,8 +539,8 @@ const markPreviewLoaded = (
   state: PlaygroundState,
   previewUrl: string,
 ): PlaygroundState =>
-  M.value(state).pipe(
-    M.tag('Booted', bootedState => {
+  Match.value(state).pipe(
+    Match.tag('Booted', bootedState => {
       const nextPreview = PlaygroundPreview.load(
         bootedState.preview,
         previewUrl,
@@ -642,7 +551,7 @@ const markPreviewLoaded = (
         return PlaygroundState.Booted({ preview: nextPreview })
       }
     }),
-    M.orElse(() => state),
+    Match.orElse(() => state),
   )
 
 export const update = (model: Model, message: Message) =>
@@ -650,7 +559,7 @@ export const update = (model: Model, message: Message) =>
     message,
     {
       BootedPlayground: ({ previewUrl }) => ({
-        model: evo(model, {
+        model: modifyFields(model, {
           state: () =>
             PlaygroundState.Booted({
               preview: PlaygroundPreview.start(previewUrl),
@@ -658,20 +567,21 @@ export const update = (model: Model, message: Message) =>
           dirtyPaths: () => [],
           lastWriteError: () => Option.none(),
         }),
-        commands: flushDirtyPaths(model),
+        commands: [WaitForPlaygroundServerFailure(), ...flushDirtyPaths(model)],
       }),
       FailedBootPlayground: ({ reason }) => ({
-        model: evo(model, {
+        model: modifyFields(model, {
           state: () => PlaygroundState.Failed({ reason }),
         }),
       }),
       ReleasedPlayground: () => ({
-        model: evo(model, {
-          state: () => PlaygroundState.Idle(),
+        model: modifyFields(model, {
+          state: state =>
+            state._tag === 'Failed' ? state : PlaygroundState.Idle(),
         }),
       }),
       LoadedPlaygroundPreview: ({ previewUrl }) => ({
-        model: evo(model, {
+        model: modifyFields(model, {
           state: state => markPreviewLoaded(state, previewUrl),
         }),
       }),
@@ -680,7 +590,7 @@ export const update = (model: Model, message: Message) =>
       EditedPlaygroundFile: ({ path, content }) => {
         const isBooted = model.state._tag === 'Booted'
         return {
-          model: evo(model, {
+          model: modifyFields(model, {
             files: Record.set(path, content),
             dirtyPaths: existing =>
               isBooted ? existing : appendDeduped(existing, path),
@@ -689,15 +599,22 @@ export const update = (model: Model, message: Message) =>
         }
       },
       FailedMountPlaygroundEditor: ({ reason }) => ({
-        model: evo(model, {
+        model: modifyFields(model, {
           state: () => PlaygroundState.Failed({ reason }),
         }),
       }),
       ScheduledWritePlaygroundFile: () => ({
-        model: evo(model, { lastWriteError: () => Option.none() }),
+        model: modifyFields(model, { lastWriteError: () => Option.none() }),
       }),
       FailedWritePlaygroundFile: ({ reason }) => ({
-        model: evo(model, { lastWriteError: () => Option.some(reason) }),
+        model: modifyFields(model, {
+          lastWriteError: () => Option.some(reason),
+        }),
+      }),
+      CompletedWaitForPlaygroundServerFailure: ({ reason }) => ({
+        model: modifyFields(model, {
+          state: () => PlaygroundState.Failed({ reason }),
+        }),
       }),
       SucceededMountPlaygroundEditor: () => ({ model }),
     },
@@ -782,7 +699,7 @@ const bootingPanelView = (heading: string, body: string): Html =>
     ],
     [
       ih.div(
-        [ih.Class('max-w-sm flex flex-col items-center')],
+        [ih.Class('max-w-xl flex flex-col items-center min-w-0')],
         [
           spinnerView(),
           ih.div(
@@ -810,7 +727,14 @@ const failurePanelView = (reason: string): Html =>
             [ih.Class('text-base font-semibold text-gray-900 mb-2')],
             ['Playground failed to load'],
           ),
-          ih.div([ih.Class('text-sm text-gray-600')], [reason]),
+          ih.div(
+            [
+              ih.Class(
+                'w-full max-h-64 overflow-auto text-left text-sm text-gray-600 whitespace-pre-wrap break-words',
+              ),
+            ],
+            [reason],
+          ),
         ],
       ),
     ],
@@ -933,21 +857,21 @@ const responsiveEditorView = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 const PlaygroundFileTabs = Tabs.create<string>()
 
-const foldPlaygroundFileTabsOutMessage = M.type<Tabs.OutMessage>().pipe(
-  M.withReturnType<Update.Step<Model, Message>>(),
-  M.tagsExhaustive({
-    Selected:
-      ({ value }) =>
-      model => ({
-        model: evo(model, { activeFilePath: () => value }),
-      }),
-  }),
-)
+const foldPlaygroundFileTabsOutMessage = Tabs.OutMessage.match<
+  Update.Step<Model, Message>
+>({
+  Selected:
+    ({ value }) =>
+    model => ({
+      model: modifyFields(model, { activeFilePath: () => value }),
+    }),
+})
 
 const foldPlaygroundFileTabs = Update.foldChild({
   update: PlaygroundFileTabs.update,
   read: (model: Model) => Option.some(model.fileTabs),
-  write: (model, nextFileTabs) => evo(model, { fileTabs: () => nextFileTabs }),
+  write: (model, nextFileTabs) =>
+    modifyFields(model, { fileTabs: () => nextFileTabs }),
   toParentMessage: message => Message.GotFileTabsMessage({ message }),
   foldOutMessage: foldPlaygroundFileTabsOutMessage,
 })
@@ -1025,28 +949,41 @@ const editorLayoutView = (model: Model, h: HtmlBuilder<Message>): Html => {
   )
 }
 
-type ViewInputs = Readonly<{ maybeIsChromium: Option.Option<boolean> }>
+type ViewInputs = Readonly<{
+  maybeIsPlaygroundSupported: Option.Option<boolean>
+}>
 
 export const view = Submodel.defineView<Model, Message, ViewInputs>(
-  (model, { maybeIsChromium }, h): Html => {
+  (model, { maybeIsPlaygroundSupported }, h): Html => {
     const maybeMeta = findBySlug(model.slug)
     const maybeFiles = Option.fromNullishOr(filesBySlug[model.slug])
 
-    const content = M.value({ maybeIsChromium, maybeMeta, maybeFiles }).pipe(
-      M.when(
-        ({ maybeIsChromium }) => Option.isNone(maybeIsChromium),
-        () => h.empty,
-      ),
-      M.when(
-        ({ maybeIsChromium }) => Option.contains(maybeIsChromium, false),
+    const content = Match.value({
+      maybeIsPlaygroundSupported,
+      maybeMeta,
+      maybeFiles,
+    }).pipe(
+      Match.when(
+        ({ maybeIsPlaygroundSupported }) =>
+          Option.isNone(maybeIsPlaygroundSupported),
         () =>
           messageView(
-            'Playground requires a Chromium browser',
-            'The editable playground runs on WebContainers, which requires Chrome, Edge, Brave, or another Chromium-based browser. You can still see the example running on its detail page.',
+            'Playground availability',
+            'The Playground needs SharedArrayBuffer on an isolated page and a compatible embedded preview. If the editor does not open, you can still see the example on its detail page.',
             maybeMeta,
           ),
       ),
-      M.orElse(() =>
+      Match.when(
+        ({ maybeIsPlaygroundSupported }) =>
+          Option.contains(maybeIsPlaygroundSupported, false),
+        () =>
+          messageView(
+            'Playground cannot run here',
+            'The Playground needs SharedArrayBuffer on a cross-origin isolated page and a working embedded preview. This browser session did not provide that combination. You can still see the example running on its detail page.',
+            maybeMeta,
+          ),
+      ),
+      Match.orElse(() =>
         Option.match(Option.all([maybeMeta, maybeFiles]), {
           onNone: () =>
             messageView(

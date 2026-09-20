@@ -9,13 +9,13 @@ import {
   scene,
   text,
 } from 'foldkit/scene'
+import { modifyFields } from 'foldkit/struct'
 import { describe, test } from 'vitest'
 
 import { RadioGroup } from '@foldkit/ui'
-import { Message as RadioGroupMessage } from '@foldkit/ui/radioGroup'
 
 import { SyncChart } from './command'
-import { loadingModel, readyModel, sampleTelemetry } from './main.fixtures'
+import { loadingModel, readyModel, sampleTelemetry } from './main.fixture'
 import { Message } from './message'
 import { TelemetryAsyncData } from './model'
 import { update } from './update'
@@ -34,7 +34,7 @@ const acknowledgeChartSync = Command.resolve(
 
 const resolveFocusOption = Command.resolve(
   RadioGroup.FocusOption,
-  RadioGroupMessage.CompletedFocusOption(),
+  RadioGroup.Message.CompletedFocusOption(),
 )
 
 describe('view', () => {
@@ -78,10 +78,12 @@ describe('view', () => {
   test('refreshing state keeps the dashboard visible', () => {
     scene(
       { update, view },
-      given({
-        ...readyModel,
-        telemetry: TelemetryAsyncData.Refreshing({ data: sampleTelemetry }),
-      }),
+      given(
+        modifyFields(readyModel, {
+          telemetry: () =>
+            TelemetryAsyncData.Refreshing({ data: sampleTelemetry }),
+        }),
+      ),
       acknowledgeChartMount,
       acknowledgeChartSync,
       expect(text('Refreshing public data')).toExist(),
@@ -92,10 +94,11 @@ describe('view', () => {
   test('failure without stale data shows retry', () => {
     scene(
       { update, view },
-      given({
-        ...loadingModel,
-        telemetry: TelemetryAsyncData.Failure({ error: 'offline' }),
-      }),
+      given(
+        modifyFields(loadingModel, {
+          telemetry: () => TelemetryAsyncData.Failure({ error: 'offline' }),
+        }),
+      ),
       expect(label('Telemetry failed')).toExist(),
       expect(role('button', { name: 'Retry' })).toExist(),
     )

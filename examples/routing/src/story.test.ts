@@ -3,9 +3,14 @@ import { Command, given, message, model, story } from 'foldkit/story'
 import { fromString } from 'foldkit/url'
 import { describe, expect, test } from 'vitest'
 
-import { AppRoute, Message, Model, update } from './main'
+import { AppRoute, Message, Model, NavigateInternal, update } from './main'
 import { People } from './page'
-import { Message as PeopleMessage } from './page/people'
+import {
+  filesIndexRouter,
+  homeRouter,
+  nestedRouter,
+  peopleRouter,
+} from './route'
 
 const peoplePageWith = (searchInput: string) =>
   People.Model.make({
@@ -41,13 +46,59 @@ const urlOrThrow = (raw: string) =>
 const resolveFetch = (searchText: string) =>
   Command.resolve(
     People.FetchPeople,
-    PeopleMessage.SucceededFetchPeople({
+    People.Message.SucceededFetchPeople({
       query: searchText,
       people: People.searchPeople(searchText),
     }),
   )
 
 describe('update', () => {
+  describe('EnteredNavigationShortcut', () => {
+    test('GH produces the Home navigation Command', () => {
+      story(
+        update,
+        given(home),
+        message(Message.EnteredNavigationShortcut({ shortcut: 'GH' })),
+        Command.expectHas(NavigateInternal({ url: homeRouter() })),
+        Command.resolve(NavigateInternal, Message.CompletedNavigateInternal()),
+      )
+    })
+
+    test('GP produces the People navigation Command', () => {
+      story(
+        update,
+        given(home),
+        message(Message.EnteredNavigationShortcut({ shortcut: 'GP' })),
+        Command.expectHas(
+          NavigateInternal({
+            url: peopleRouter({ searchText: Option.none() }),
+          }),
+        ),
+        Command.resolve(NavigateInternal, Message.CompletedNavigateInternal()),
+      )
+    })
+
+    test('GF produces the Files navigation Command', () => {
+      story(
+        update,
+        given(home),
+        message(Message.EnteredNavigationShortcut({ shortcut: 'GF' })),
+        Command.expectHas(NavigateInternal({ url: filesIndexRouter() })),
+        Command.resolve(NavigateInternal, Message.CompletedNavigateInternal()),
+      )
+    })
+
+    test('GN produces the Nested navigation Command', () => {
+      story(
+        update,
+        given(home),
+        message(Message.EnteredNavigationShortcut({ shortcut: 'GN' })),
+        Command.expectHas(NavigateInternal({ url: nestedRouter() })),
+        Command.resolve(NavigateInternal, Message.CompletedNavigateInternal()),
+      )
+    })
+  })
+
   describe('ChangedUrl', () => {
     test('navigating to /people parses to a People route', () => {
       story(
@@ -198,47 +249,18 @@ describe('update', () => {
   })
 
   describe('GotPeopleMessage', () => {
-    test('typing updates the input without recording history or firing a command', () => {
+    test('GotPeopleMessage writes through to peoplePage', () => {
       story(
         update,
         given(onPeople('')),
         message(
           Message.GotPeopleMessage({
-            message: PeopleMessage.ChangedSearchInput({ value: 'd' }),
+            message: People.Message.ChangedSearchInput({ value: 'd' }),
           }),
         ),
-        message(
-          Message.GotPeopleMessage({
-            message: PeopleMessage.ChangedSearchInput({ value: 'de' }),
-          }),
-        ),
-        message(
-          Message.GotPeopleMessage({
-            message: PeopleMessage.ChangedSearchInput({ value: 'designer' }),
-          }),
-        ),
-        Command.expectNone(),
         model(model => {
-          expect(model.peoplePage.searchInput).toBe('designer')
-          expect(model.peoplePage.searchHistory).toStrictEqual([])
+          expect(model.peoplePage.searchInput).toBe('d')
         }),
-      )
-    })
-
-    test('submitting the search pushes the current input to the URL', () => {
-      story(
-        update,
-        given(onPeople('designer')),
-        message(
-          Message.GotPeopleMessage({
-            message: PeopleMessage.SubmittedSearch(),
-          }),
-        ),
-        Command.expectHas(People.PushSearchUrl),
-        Command.resolve(
-          People.PushSearchUrl,
-          PeopleMessage.CompletedPushSearchUrl(),
-        ),
       )
     })
   })

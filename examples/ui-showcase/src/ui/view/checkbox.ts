@@ -3,7 +3,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 
 import { Checkbox } from '@foldkit/ui'
 
-import { UiMessage } from '../message'
+import { Message as UiMessage } from '../message'
 import type { UiModel } from '../model'
 
 const CHECKBOX_BASIC_DEMO_ID = 'checkbox-basic-demo'
@@ -38,6 +38,7 @@ export const view = Submodel.defineView<UiModel, UiMessage>(
           {
             id: CHECKBOX_BASIC_DEMO_ID,
             isChecked: model.isCheckboxBasicDemoChecked,
+            hasDescription: true,
             onToggle: isChecked =>
               UiMessage.ToggledCheckboxBasicDemo({ isChecked }),
             toView: attributes =>

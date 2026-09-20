@@ -1,18 +1,18 @@
-import { Effect, Schema as S } from 'effect'
+import { Effect, Schema } from 'effect'
 import { Command, Runtime, type Update } from 'foldkit'
 import { type Document, type Html, type HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { Url, toString as urlToString } from 'foldkit/url'
 
 import { AppRoute, aboutRouter, homeRouter, urlToAppRoute } from './route'
 
 // MODEL
 
-export const Model = S.Struct({
+export const Model = Schema.Struct({
   route: AppRoute,
-  count: S.Number,
+  count: Schema.Number,
 })
 export type Model = typeof Model.Type
 
@@ -37,14 +37,14 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = url => ({
 // COMMAND
 
 const NavigateInternal = Command.define('NavigateInternal', {
-  args: { url: S.String },
+  args: { url: Schema.String },
   messages: [Message.CompletedNavigateInternal],
   execute: ({ url }) =>
     pushUrl(url).pipe(Effect.as(Message.CompletedNavigateInternal())),
 })
 
 const LoadExternal = Command.define('LoadExternal', {
-  args: { href: S.String },
+  args: { href: Schema.String },
   messages: [Message.CompletedLoadExternal],
   execute: ({ href }) =>
     load(href).pipe(Effect.as(Message.CompletedLoadExternal())),
@@ -57,7 +57,7 @@ type UpdateReturn = Update.Return<Model, Message>
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     ClickedIncrement: () => ({
-      model: evo(model, { count: count => count + 1 }),
+      model: modifyFields(model, { count: count => count + 1 }),
     }),
     ClickedLink: ({ request }) =>
       UrlRequest.match<UpdateReturn>(request, {
@@ -71,7 +71,7 @@ export const update = (model: Model, message: Message) =>
         }),
       }),
     ChangedUrl: ({ url }) => ({
-      model: evo(model, { route: () => urlToAppRoute(url) }),
+      model: modifyFields(model, { route: () => urlToAppRoute(url) }),
     }),
     CompletedNavigateInternal: () => ({ model }),
     CompletedLoadExternal: () => ({ model }),
