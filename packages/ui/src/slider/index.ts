@@ -305,9 +305,6 @@ export const reflectRange: Reflect<
 
 // SUBSCRIPTION
 
-const THUMB_SIZE = '0.75rem'
-const THUMB_HALF = '0.375rem'
-
 const DragActivity = Schema.Literals(['Idle', 'Active'])
 
 const dragActivityFromModel = (model: Model): typeof DragActivity.Type =>
@@ -326,8 +323,8 @@ const trackElement = (
   )
 
 const isVerticalTrack = (element: Element): boolean =>
-  element.hasAttribute('data-vertical') ||
-  element.closest('[data-vertical]') !== null
+  element.getAttribute('data-orientation') === 'vertical' ||
+  element.hasAttribute('data-vertical')
 
 /** Maps a pointer position to a slider value, respecting the track's
  *  orientation. Vertical tracks invert the axis so the bottom represents
@@ -506,27 +503,45 @@ export type SliderAttributes = Readonly<{
   hiddenInput: ReadonlyArray<ChildAttribute>
 }>
 
-export type Orientation = 'horizontal' | 'vertical'
+/** Layout axis for the slider track. Matches the `Orientation` unions on
+ *  Tabs, RadioGroup, and Listbox. Lowercased at the DOM attribute boundary. */
+export const Orientation = Schema.Literals(['Horizontal', 'Vertical'])
+export type Orientation = typeof Orientation.Type
 
-export type ThumbAlignment = 'center' | 'edge'
+/** How the thumb aligns within the track. Lowercased at the DOM attribute
+ *  boundary. */
+export const ThumbAlignment = Schema.Literals(['Center', 'Edge'])
+export type ThumbAlignment = typeof ThumbAlignment.Type
 
 const filledTrackStyle = (
   orientation: Orientation,
   thumbAlignment: ThumbAlignment,
+  thumbSize: string,
   fraction: number,
 ): Readonly<Record<string, string>> => {
-  if (orientation === 'vertical') {
+  if (orientation === 'Vertical') {
+    if (thumbAlignment === 'Center') {
+      return {
+        position: 'absolute',
+        bottom: '0',
+        left: '0',
+        right: '0',
+        height: percentString(fraction),
+        width: '100%',
+        'pointer-events': 'none',
+      }
+    }
     return {
       position: 'absolute',
       bottom: '0',
       left: '0',
       right: '0',
-      height: percentString(fraction),
+      height: `calc((100% - ${thumbSize}) * ${fraction} + ${thumbSize} / 2)`,
       width: '100%',
       'pointer-events': 'none',
     }
   }
-  if (thumbAlignment === 'center') {
+  if (thumbAlignment === 'Center') {
     return {
       position: 'absolute',
       left: '0',
@@ -541,7 +556,7 @@ const filledTrackStyle = (
     left: '0',
     top: '0',
     bottom: '0',
-    width: `calc((100% - ${THUMB_SIZE}) * ${fraction} + ${THUMB_HALF})`,
+    width: `calc((100% - ${thumbSize}) * ${fraction} + ${thumbSize} / 2)`,
     'pointer-events': 'none',
   }
 }
@@ -549,18 +564,28 @@ const filledTrackStyle = (
 const thumbStyle = (
   orientation: Orientation,
   thumbAlignment: ThumbAlignment,
+  thumbSize: string,
   fraction: number,
 ): Readonly<Record<string, string>> => {
-  if (orientation === 'vertical') {
+  if (orientation === 'Vertical') {
+    if (thumbAlignment === 'Center') {
+      return {
+        position: 'absolute',
+        bottom: percentString(fraction),
+        left: '50%',
+        transform: 'translateX(-50%) translateY(50%)',
+        'touch-action': 'none',
+      }
+    }
     return {
       position: 'absolute',
-      bottom: percentString(fraction),
+      bottom: `calc((100% - ${thumbSize}) * ${fraction})`,
       left: '50%',
-      transform: 'translateX(-50%) translateY(-50%)',
+      transform: 'translateX(-50%)',
       'touch-action': 'none',
     }
   }
-  if (thumbAlignment === 'center') {
+  if (thumbAlignment === 'Center') {
     return {
       position: 'absolute',
       left: percentString(fraction),
@@ -570,7 +595,7 @@ const thumbStyle = (
   }
   return {
     position: 'absolute',
-    left: `calc((100% - ${THUMB_SIZE}) * ${fraction})`,
+    left: `calc((100% - ${thumbSize}) * ${fraction})`,
     'touch-action': 'none',
   }
 }
@@ -581,13 +606,20 @@ export type ViewInputs = Readonly<{
    *  position, `aria-valuenow`, and the filled track all derive from it. */
   value: number
   toView: (attributes: SliderAttributes) => Html
-  /** Layout axis for the track, range, and thumb. Vertical sliders place
+  /** Layout axis for the track, range, and thumb. `Vertical` sliders place
    *  `min` at the bottom and `max` at the top. */
   orientation?: Orientation
-  /** How the thumb aligns within the track. `edge` keeps the thumb fully
-   *  inside the track at the extremes, `center` lets it overflow by half its
-   *  width. Defaults to `edge` for shadcn parity. */
+  /** How the thumb aligns within the track. `Center` keeps the thumb's
+   *  center on the value point and lets it overflow by half its size at the
+   *  extremes, matching the slider's previous behavior. `Edge` insets the
+   *  thumb's travel by `thumbSize` so it stays fully inside the track.
+   *  Defaults to `Center` so existing sliders keep their geometry. */
   thumbAlignment?: ThumbAlignment
+  /** CSS length of the thumb along the track axis, used only when
+   *  `thumbAlignment` is `Edge` to inset the thumb's travel and align the
+   *  fill with the thumb's center. Set this to the size your `toView`
+   *  callback styles the thumb with. Defaults to `0.75rem`. */
+  thumbSize?: string
   ariaLabel?: string
   ariaLabelledBy?: string
   formatValue?: (value: number) => string
@@ -627,8 +659,9 @@ export const view = defineView<Model, Message, ViewInputs>(
       isDisabled = false,
       isReadOnly = false,
       name,
-      orientation = 'horizontal',
-      thumbAlignment = 'edge',
+      orientation = 'Horizontal',
+      thumbAlignment = 'Center',
+      thumbSize = '0.75rem',
       getTrackRoot = () => document,
     } = viewInputs
     const { id, min, max } = model
@@ -682,10 +715,12 @@ export const view = defineView<Model, Message, ViewInputs>(
       ...(isReadOnly ? [h.DataAttribute('readonly', '')] : []),
     ]
 
+    const domOrientation = String.toLowerCase(orientation)
+
     const rootAttributes = [
       h.DataAttribute('slider-id', id),
-      h.DataAttribute('orientation', orientation),
-      h.DataAttribute(orientation, ''),
+      h.DataAttribute('orientation', domOrientation),
+      h.DataAttribute(domOrientation, ''),
       ...stateAttributes,
     ]
 
@@ -697,15 +732,17 @@ export const view = defineView<Model, Message, ViewInputs>(
 
     const trackAttributes = [
       h.DataAttribute('slider-track-id', id),
-      h.DataAttribute('orientation', orientation),
-      h.DataAttribute(orientation, ''),
+      h.DataAttribute('orientation', domOrientation),
+      h.DataAttribute(domOrientation, ''),
       h.Style({ position: 'relative', 'touch-action': 'none' }),
       ...stateAttributes,
       ...trackInteractionAttributes,
     ]
 
     const filledTrackAttributes = [
-      h.Style(filledTrackStyle(orientation, thumbAlignment, fraction)),
+      h.Style(
+        filledTrackStyle(orientation, thumbAlignment, thumbSize, fraction),
+      ),
       ...stateAttributes,
     ]
 
@@ -734,7 +771,7 @@ export const view = defineView<Model, Message, ViewInputs>(
       h.Id(`${id}-thumb`),
       h.Role('slider'),
       h.Tabindex(0),
-      h.AriaOrientation(orientation),
+      h.AriaOrientation(domOrientation),
       h.AriaValuemin(min),
       h.AriaValuemax(max),
       h.AriaValuenow(value),
@@ -742,7 +779,7 @@ export const view = defineView<Model, Message, ViewInputs>(
       ...thumbLabelAttributes,
       ...(isDisabled ? [h.AriaDisabled(true)] : []),
       ...(isReadOnly ? [h.AriaReadonly(true)] : []),
-      h.Style(thumbStyle(orientation, thumbAlignment, fraction)),
+      h.Style(thumbStyle(orientation, thumbAlignment, thumbSize, fraction)),
       ...stateAttributes,
       ...thumbInteractionAttributes,
     ]

@@ -34,6 +34,7 @@ const defaultModel = init({
 
 const root = Scene.selector('[data-slider-id="test"]')
 const track = Scene.selector('[data-slider-track-id="test"]')
+const filledTrack = Scene.selector('[data-slider-track-id="test"] div')
 const thumb = Scene.role('slider')
 const hiddenInput = Scene.selector('[type="hidden"]')
 
@@ -193,6 +194,92 @@ describe('Slider', () => {
         { update, view: sceneView({ isReadOnly: true }) },
         Scene.given(defaultModel),
         Scene.expect(thumb).toHaveAttr('tabIndex', '0'),
+      )
+    })
+  })
+
+  describe('vertical geometry', () => {
+    it('centers the thumb on the value point at min, mid, and max', () => {
+      Scene.scene(
+        { update, view: sceneView({ orientation: 'Vertical', value: 0 }) },
+        Scene.given(defaultModel),
+        Scene.expect(thumb).toHaveStyle('bottom', '0%'),
+        Scene.expect(thumb).toHaveStyle('left', '50%'),
+        Scene.expect(thumb).toHaveStyle(
+          'transform',
+          'translateX(-50%) translateY(50%)',
+        ),
+      )
+      Scene.scene(
+        { update, view: sceneView({ orientation: 'Vertical', value: 5 }) },
+        Scene.given(defaultModel),
+        Scene.expect(thumb).toHaveStyle('bottom', '50%'),
+      )
+      Scene.scene(
+        { update, view: sceneView({ orientation: 'Vertical', value: 10 }) },
+        Scene.given(defaultModel),
+        Scene.expect(thumb).toHaveStyle('bottom', '100%'),
+      )
+    })
+
+    it('insets edge-aligned travel by the thumb size at min, mid, and max', () => {
+      Scene.scene(
+        {
+          update,
+          view: sceneView({
+            orientation: 'Vertical',
+            thumbAlignment: 'Edge',
+            value: 0,
+          }),
+        },
+        Scene.given(defaultModel),
+        Scene.expect(thumb).toHaveStyle('bottom', 'calc((100% - 0.75rem) * 0)'),
+        Scene.expect(thumb).toHaveStyle('transform', 'translateX(-50%)'),
+      )
+      Scene.scene(
+        {
+          update,
+          view: sceneView({
+            orientation: 'Vertical',
+            thumbAlignment: 'Edge',
+            value: 5,
+          }),
+        },
+        Scene.given(defaultModel),
+        Scene.expect(thumb).toHaveStyle(
+          'bottom',
+          'calc((100% - 0.75rem) * 0.5)',
+        ),
+      )
+      Scene.scene(
+        {
+          update,
+          view: sceneView({
+            orientation: 'Vertical',
+            thumbAlignment: 'Edge',
+            value: 10,
+          }),
+        },
+        Scene.given(defaultModel),
+        Scene.expect(thumb).toHaveStyle('bottom', 'calc((100% - 0.75rem) * 1)'),
+      )
+    })
+
+    it('sizes the edge-aligned fill to the thumb center', () => {
+      Scene.scene(
+        {
+          update,
+          view: sceneView({
+            orientation: 'Vertical',
+            thumbAlignment: 'Edge',
+            value: 5,
+          }),
+        },
+        Scene.given(defaultModel),
+        Scene.expect(filledTrack).toHaveStyle(
+          'height',
+          'calc((100% - 0.75rem) * 0.5 + 0.75rem / 2)',
+        ),
       )
     })
   })

@@ -9,6 +9,7 @@ import {
   reflectRange,
   snapAndClamp,
   update,
+  valueFromPointer,
 } from './index.js'
 
 const defaultInit = () => init({ id: 'test', min: 0, max: 10, step: 1 })
@@ -416,6 +417,52 @@ describe('Slider', () => {
         Story.message(Message.PressedPointer({ value: 5, originValue: 5 })),
         Story.expectNoOutMessage(),
       )
+    })
+  })
+
+  describe('valueFromPointer', () => {
+    const stubRect = (
+      element: Element,
+      rect: { left: number; top: number; width: number; height: number },
+    ): void => {
+      element.getBoundingClientRect = (): DOMRect => ({
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        right: rect.left + rect.width,
+        bottom: rect.top + rect.height,
+        x: rect.left,
+        y: rect.top,
+        toJSON: () => ({}),
+      })
+    }
+
+    it('maps horizontal pointer position on the X axis', () => {
+      const track = document.createElement('div')
+      track.setAttribute('data-orientation', 'horizontal')
+      track.setAttribute('data-horizontal', '')
+      stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
+      expect(valueFromPointer(50, 10, track, 0, 10)).toBe(2.5)
+    })
+
+    it('maps vertical pointer position on the inverted Y axis', () => {
+      const track = document.createElement('div')
+      track.setAttribute('data-orientation', 'vertical')
+      track.setAttribute('data-vertical', '')
+      stubRect(track, { left: 0, top: 0, width: 20, height: 200 })
+      expect(valueFromPointer(10, 50, track, 0, 10)).toBe(7.5)
+    })
+
+    it('reads the track element own orientation when nested inside an oppositely-oriented slider', () => {
+      const ancestor = document.createElement('div')
+      ancestor.setAttribute('data-vertical', '')
+      const track = document.createElement('div')
+      track.setAttribute('data-orientation', 'horizontal')
+      track.setAttribute('data-horizontal', '')
+      ancestor.appendChild(track)
+      stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
+      expect(valueFromPointer(50, 10, track, 0, 10)).toBe(2.5)
     })
   })
 

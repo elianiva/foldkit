@@ -10,7 +10,9 @@ export {
   valueFromPointer,
   Model,
   Message,
+  Orientation,
   OutMessage,
+  ThumbAlignment,
   type PressedThumb,
   type PressedPointer,
   type MovedDragPointer,
@@ -19,10 +21,4 @@ export {
   type PressedKeyboardNavigation,
 } from './index.js'
 
-export type {
-  InitConfig,
-  ViewInputs,
-  SliderAttributes,
-  Orientation,
-  ThumbAlignment,
-} from './index.js'
+export type { InitConfig, ViewInputs, SliderAttributes } from './index.js'
