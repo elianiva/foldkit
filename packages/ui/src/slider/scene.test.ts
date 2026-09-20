@@ -219,6 +219,10 @@ describe('Slider', () => {
         { update, view: sceneView({ orientation: 'Vertical', value: 10 }) },
         Scene.given(defaultModel),
         Scene.expect(thumb).toHaveStyle('bottom', '100%'),
+        Scene.expect(thumb).toHaveStyle(
+          'transform',
+          'translateX(-50%) translateY(50%)',
+        ),
       )
     })
 
@@ -262,6 +266,22 @@ describe('Slider', () => {
         },
         Scene.given(defaultModel),
         Scene.expect(thumb).toHaveStyle('bottom', 'calc((100% - 0.75rem) * 1)'),
+      )
+    })
+
+    it('sizes edge-aligned travel from the thumbSize input', () => {
+      Scene.scene(
+        {
+          update,
+          view: sceneView({
+            orientation: 'Vertical',
+            thumbAlignment: 'Edge',
+            thumbSize: '1rem',
+            value: 5,
+          }),
+        },
+        Scene.given(defaultModel),
+        Scene.expect(thumb).toHaveStyle('bottom', 'calc((100% - 1rem) * 0.5)'),
       )
     })
 
