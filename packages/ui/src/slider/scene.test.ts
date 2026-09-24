@@ -304,6 +304,24 @@ describe('Slider', () => {
     })
   })
 
+  describe('thumb alignment attributes', () => {
+    it('marks the track with data-thumb-alignment=center by default', () => {
+      Scene.scene(
+        { update, view: sceneView() },
+        Scene.given(defaultModel),
+        Scene.expect(track).toHaveAttr('data-thumb-alignment', 'center'),
+      )
+    })
+
+    it('marks the track with data-thumb-alignment=edge for pointer mapping', () => {
+      Scene.scene(
+        { update, view: sceneView({ thumbAlignment: 'Edge' }) },
+        Scene.given(defaultModel),
+        Scene.expect(track).toHaveAttr('data-thumb-alignment', 'edge'),
+      )
+    })
+  })
+
   describe('hidden input', () => {
     it('is absent when no name is provided', () => {
       Scene.scene(

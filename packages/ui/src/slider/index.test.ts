@@ -464,6 +464,65 @@ describe('Slider', () => {
       stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
       expect(valueFromPointer(50, 10, track, 0, 10)).toBe(2.5)
     })
+
+    it('maps edge-aligned horizontal pointers across the inset thumb range', () => {
+      const root = document.createElement('div')
+      root.setAttribute('data-slider-id', 'edge-horizontal')
+      const track = document.createElement('div')
+      track.setAttribute('data-slider-track-id', 'edge-horizontal')
+      track.setAttribute('data-orientation', 'horizontal')
+      track.setAttribute('data-thumb-alignment', 'edge')
+      stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
+      const thumb = document.createElement('div')
+      thumb.id = 'edge-horizontal-thumb'
+      stubRect(thumb, { left: 0, top: 0, width: 20, height: 20 })
+      root.appendChild(track)
+      root.appendChild(thumb)
+      document.body.appendChild(root)
+      try {
+        expect(valueFromPointer(10, 10, track, 0, 100)).toBe(0)
+        expect(valueFromPointer(100, 10, track, 0, 100)).toBe(50)
+        expect(valueFromPointer(190, 10, track, 0, 100)).toBe(100)
+        expect(valueFromPointer(0, 10, track, 0, 100)).toBe(0)
+        expect(valueFromPointer(200, 10, track, 0, 100)).toBe(100)
+      } finally {
+        root.remove()
+      }
+    })
+
+    it('maps edge-aligned vertical pointers across the inverted inset thumb range', () => {
+      const track = document.createElement('div')
+      track.setAttribute('data-slider-track-id', 'edge-vertical')
+      track.setAttribute('data-orientation', 'vertical')
+      track.setAttribute('data-thumb-alignment', 'edge')
+      stubRect(track, { left: 0, top: 0, width: 20, height: 200 })
+      const thumb = document.createElement('div')
+      thumb.id = 'edge-vertical-thumb'
+      stubRect(thumb, { left: 0, top: 0, width: 20, height: 20 })
+      document.body.appendChild(track)
+      document.body.appendChild(thumb)
+      try {
+        expect(valueFromPointer(10, 190, track, 0, 100)).toBe(0)
+        expect(valueFromPointer(10, 100, track, 0, 100)).toBe(50)
+        expect(valueFromPointer(10, 10, track, 0, 100)).toBe(100)
+        expect(valueFromPointer(10, 200, track, 0, 100)).toBe(0)
+        expect(valueFromPointer(10, 0, track, 0, 100)).toBe(100)
+      } finally {
+        track.remove()
+        thumb.remove()
+      }
+    })
+
+    it('maps edge-aligned pointers across the full track when the thumb element is absent', () => {
+      const track = document.createElement('div')
+      track.setAttribute('data-slider-track-id', 'edge-without-thumb')
+      track.setAttribute('data-orientation', 'horizontal')
+      track.setAttribute('data-thumb-alignment', 'edge')
+      stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
+      expect(valueFromPointer(0, 10, track, 0, 100)).toBe(0)
+      expect(valueFromPointer(100, 10, track, 0, 100)).toBe(50)
+      expect(valueFromPointer(200, 10, track, 0, 100)).toBe(100)
+    })
   })
 
   describe('fractionOfValue', () => {

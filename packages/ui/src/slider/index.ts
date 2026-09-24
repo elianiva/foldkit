@@ -17,7 +17,7 @@ import { modifyFields } from 'foldkit/struct'
 import { type Reflect, defineView } from 'foldkit/submodel'
 import * as Subscription from 'foldkit/subscription'
 
-import { attributeSelector } from '../internal/selectors.js'
+import { attributeSelector, idSelector } from '../internal/selectors.js'
 
 // MODEL
 
@@ -326,10 +326,61 @@ const isVerticalTrack = (element: Element): boolean =>
   element.getAttribute('data-orientation') === 'vertical' ||
   element.hasAttribute('data-vertical')
 
+const isEdgeAlignedTrack = (element: Element): boolean =>
+  element.getAttribute('data-thumb-alignment') === 'edge'
+
+const thumbElementForTrack = (track: Element): Element | null => {
+  const sliderId = track.getAttribute('data-slider-track-id')
+  if (sliderId === null) {
+    return null
+  } else {
+    const thumbSelector = idSelector(`${sliderId}-thumb`)
+    const sliderRoot = track.closest(
+      attributeSelector('data-slider-id', sliderId),
+    )
+    if (sliderRoot !== null) {
+      return sliderRoot.querySelector<Element>(thumbSelector)
+    } else {
+      return track.ownerDocument.getElementById(`${sliderId}-thumb`)
+    }
+  }
+}
+
+const edgeInsetForTrack = (track: Element): number => {
+  if (!isEdgeAlignedTrack(track)) {
+    return 0
+  }
+  const thumb = thumbElementForTrack(track)
+  if (thumb === null) {
+    return 0
+  } else {
+    const thumbRect = thumb.getBoundingClientRect()
+    const thumbSize = isVerticalTrack(track)
+      ? thumbRect.height
+      : thumbRect.width
+    return thumbSize / 2
+  }
+}
+
+const fractionOfPointerPosition = (
+  position: number,
+  size: number,
+  inset: number,
+): number => {
+  const travel = size - inset * 2
+  if (travel <= 0) {
+    return clamp(position / size, 0, 1)
+  } else {
+    return clamp((position - inset) / travel, 0, 1)
+  }
+}
+
 /** Maps a pointer position to a slider value, respecting the track's
  *  orientation. Vertical tracks invert the axis so the bottom represents
  *  `min` and the top represents `max`, matching the WAI-ARIA slider
- *  convention. */
+ *  convention. Edge-aligned tracks map across the same inset range the thumb
+ *  travels through, measured from the rendered thumb element, so the value
+ *  under the pointer matches the rendered thumb position. */
 export const valueFromPointer = (
   clientX: number,
   clientY: number,
@@ -342,14 +393,22 @@ export const valueFromPointer = (
     if (rect.height === 0) {
       return min
     } else {
-      const fraction = clamp(1 - (clientY - rect.top) / rect.height, 0, 1)
+      const fraction = fractionOfPointerPosition(
+        rect.bottom - clientY,
+        rect.height,
+        edgeInsetForTrack(track),
+      )
       return min + fraction * (max - min)
     }
   }
   if (rect.width === 0) {
     return min
   } else {
-    const fraction = clamp((clientX - rect.left) / rect.width, 0, 1)
+    const fraction = fractionOfPointerPosition(
+      clientX - rect.left,
+      rect.width,
+      edgeInsetForTrack(track),
+    )
     return min + fraction * (max - min)
   }
 }
@@ -716,6 +775,7 @@ export const view = defineView<Model, Message, ViewInputs>(
     ]
 
     const domOrientation = String.toLowerCase(orientation)
+    const domThumbAlignment = String.toLowerCase(thumbAlignment)
 
     const rootAttributes = [
       h.DataAttribute('slider-id', id),
@@ -734,6 +794,7 @@ export const view = defineView<Model, Message, ViewInputs>(
       h.DataAttribute('slider-track-id', id),
       h.DataAttribute('orientation', domOrientation),
       h.DataAttribute(domOrientation, ''),
+      h.DataAttribute('thumb-alignment', domThumbAlignment),
       h.Style({ position: 'relative', 'touch-action': 'none' }),
       ...stateAttributes,
       ...trackInteractionAttributes,
