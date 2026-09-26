@@ -26,11 +26,11 @@ const DragState = defineTaggedUnion({
   Dragging: { originValue: Schema.Number },
 })
 
-/** Schema for the slider component's private interaction state. The current
+/** Schema for the Slider's private interaction state. The current
  *  value is owned by the parent and passed in via `ViewInputs.value`, so it is
- *  not stored here. `min`/`max`/`step` are configuration the drag subscription
- *  reads to map pointer positions into values. `dragState` tracks the active
- *  drag phase and captures the pre-drag value so Escape can restore it. */
+ *  not stored here. `min`, `max`, and `step` configure how the drag Subscription
+ *  maps pointer positions into values. `dragState` tracks the active drag phase
+ *  and captures the pre-drag value so Escape can restore it. */
 export const Model = Schema.Struct({
   id: Schema.String,
   min: Schema.Number,
@@ -43,7 +43,7 @@ export type Model = typeof Model.Type
 
 // MESSAGE
 
-/** Union of all messages the slider component can produce. */
+/** Union of all Messages the Slider can produce. */
 export const Message = defineMessageUnion({
   PressedThumb: { originValue: Schema.Number },
   PressedPointer: {
@@ -78,7 +78,7 @@ export type PressedKeyboardNavigation =
 
 // OUT MESSAGE
 
-/** Union of all out-messages the slider component can emit to its parent. */
+/** Union of all OutMessages the Slider can emit to its parent. */
 export const OutMessage = defineMessageUnion({
   ChangedValue: { value: Schema.Number },
 })
@@ -86,7 +86,7 @@ export type OutMessage = typeof OutMessage.Type
 
 // INIT
 
-/** Configuration for creating a slider model with `init`. */
+/** Configuration for creating a Slider Model with `init`. */
 export type InitConfig = Readonly<{
   id: string
   min: number
@@ -94,7 +94,7 @@ export type InitConfig = Readonly<{
   step: number
 }>
 
-/** Creates an initial slider model from a config. The value lives in the
+/** Creates an initial Slider Model from a config. The value lives in the
  *  parent Model; initialize it there and snap it with {@link snapAndClamp}. */
 export const init = (config: InitConfig): Model => ({
   id: config.id,
@@ -127,7 +127,7 @@ const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max)
 
 /** Snaps a value to the nearest step and clamps it into `[min, max]`. Exported
- *  so a parent can conform the value it owns to the slider's range, for example
+ *  so a parent can conform the value it owns to the Slider's range, for example
  *  when seeding the initial value or reacting to an external update. */
 export const snapAndClamp = (
   value: number,
@@ -314,73 +314,78 @@ const dragActivityFromModel = (model: Model): typeof DragActivity.Type =>
     Match.orElse(() => 'Idle'),
   )
 
-const trackElement = (
-  id: string,
-  root: Document | ShadowRoot,
+const findTrackElement = (
+  sliderId: string,
+  trackRoot: Document | ShadowRoot,
 ): Option.Option<Element> =>
   Option.fromNullishOr(
-    root.querySelector<Element>(attributeSelector('data-slider-track-id', id)),
+    trackRoot.querySelector<Element>(
+      attributeSelector('data-slider-track-id', sliderId),
+    ),
   )
 
-const isVerticalTrack = (element: Element): boolean =>
-  element.getAttribute('data-orientation') === 'vertical' ||
-  element.hasAttribute('data-vertical')
+const isVerticalTrack = (track: Element): boolean =>
+  track.getAttribute('data-orientation') === 'vertical' ||
+  track.hasAttribute('data-vertical')
 
-const isEdgeAlignedTrack = (element: Element): boolean =>
-  element.getAttribute('data-thumb-alignment') === 'edge'
+const isEdgeAlignedTrack = (track: Element): boolean =>
+  track.getAttribute('data-thumb-alignment') === 'edge'
 
-const thumbElementForTrack = (track: Element): Element | null => {
-  const sliderId = track.getAttribute('data-slider-track-id')
-  if (sliderId === null) {
-    return null
-  } else {
-    const thumbSelector = idSelector(`${sliderId}-thumb`)
-    const sliderRoot = track.closest(
-      attributeSelector('data-slider-id', sliderId),
-    )
-    if (sliderRoot !== null) {
-      return sliderRoot.querySelector<Element>(thumbSelector)
-    } else {
-      return track.ownerDocument.getElementById(`${sliderId}-thumb`)
-    }
-  }
-}
+const findThumbElementForTrack = (track: Element): Option.Option<Element> =>
+  pipe(
+    track.getAttribute('data-slider-track-id'),
+    Option.fromNullishOr,
+    Option.flatMap(sliderId => {
+      const thumbSelector = idSelector(`${sliderId}-thumb`)
+      const maybeSliderRoot = Option.fromNullishOr(
+        track.closest(attributeSelector('data-slider-id', sliderId)),
+      )
+
+      return Option.match(maybeSliderRoot, {
+        onNone: () =>
+          Option.fromNullishOr(
+            track.ownerDocument.getElementById(`${sliderId}-thumb`),
+          ),
+        onSome: sliderRoot =>
+          Option.fromNullishOr(
+            sliderRoot.querySelector<Element>(thumbSelector),
+          ),
+      })
+    }),
+  )
 
 const edgeInsetForTrack = (track: Element): number => {
   if (!isEdgeAlignedTrack(track)) {
     return 0
   }
-  const thumb = thumbElementForTrack(track)
-  if (thumb === null) {
+
+  const maybeThumb = findThumbElementForTrack(track)
+  if (Option.isNone(maybeThumb)) {
     return 0
-  } else {
-    const thumbRect = thumb.getBoundingClientRect()
-    const thumbSize = isVerticalTrack(track)
-      ? thumbRect.height
-      : thumbRect.width
-    return thumbSize / 2
   }
+
+  const thumbRect = maybeThumb.value.getBoundingClientRect()
+  const thumbSize = isVerticalTrack(track) ? thumbRect.height : thumbRect.width
+
+  return thumbSize / 2
 }
 
 const fractionOfPointerPosition = (
-  position: number,
-  size: number,
-  inset: number,
+  pointerPosition: number,
+  trackSize: number,
+  edgeInset: number,
 ): number => {
-  const travel = size - inset * 2
-  if (travel <= 0) {
-    return clamp(position / size, 0, 1)
+  const travelSize = trackSize - edgeInset * 2
+  if (travelSize <= 0) {
+    return clamp(pointerPosition / trackSize, 0, 1)
   } else {
-    return clamp((position - inset) / travel, 0, 1)
+    return clamp((pointerPosition - edgeInset) / travelSize, 0, 1)
   }
 }
 
-/** Maps a pointer position to a slider value, respecting the track's
- *  orientation. Vertical tracks invert the axis so the bottom represents
- *  `min` and the top represents `max`, matching the WAI-ARIA slider
- *  convention. Edge-aligned tracks map across the same inset range the thumb
- *  travels through, measured from the rendered thumb element, so the value
- *  under the pointer matches the rendered thumb position. */
+/** Maps a pointer position to a Slider value. Vertical tracks place `min` at
+ *  the bottom and `max` at the top. Edge-aligned tracks measure the rendered
+ *  thumb and map the pointer across the same inset range it travels through. */
 export const valueFromPointer = (
   clientX: number,
   clientY: number,
@@ -388,35 +393,37 @@ export const valueFromPointer = (
   min: number,
   max: number,
 ): number => {
-  const rect = track.getBoundingClientRect()
+  const trackRect = track.getBoundingClientRect()
   if (isVerticalTrack(track)) {
-    if (rect.height === 0) {
+    if (trackRect.height === 0) {
       return min
     } else {
       const fraction = fractionOfPointerPosition(
-        rect.bottom - clientY,
-        rect.height,
+        trackRect.bottom - clientY,
+        trackRect.height,
         edgeInsetForTrack(track),
       )
+
       return min + fraction * (max - min)
     }
   }
-  if (rect.width === 0) {
+
+  if (trackRect.width === 0) {
     return min
   } else {
     const fraction = fractionOfPointerPosition(
-      clientX - rect.left,
-      rect.width,
+      clientX - trackRect.left,
+      trackRect.width,
       edgeInsetForTrack(track),
     )
+
     return min + fraction * (max - min)
   }
 }
 
-/** Builds slider drag subscriptions, looking up the track
- *  element through the supplied root resolver. Use this when the slider is
- *  rendered inside a Shadow DOM. The root is read lazily so consumers can
- *  resolve it at subscription time. */
+/** Builds Slider drag Subscriptions that find the track through the supplied
+ *  root resolver. Use this when the Slider is rendered inside a Shadow DOM.
+ *  The resolver runs at subscription time. */
 export const subscriptionsForRoot = (
   getTrackRoot: () => Document | ShadowRoot,
 ) =>
@@ -443,12 +450,12 @@ export const subscriptionsForRoot = (
             ).pipe(
               Stream.mapEffect(event =>
                 Effect.sync(() =>
-                  Option.map(trackElement(id, getTrackRoot()), element =>
+                  Option.map(findTrackElement(id, getTrackRoot()), track =>
                     Message.MovedDragPointer({
                       value: valueFromPointer(
                         event.clientX,
                         event.clientY,
-                        element,
+                        track,
                         min,
                         max,
                       ),
@@ -519,7 +526,7 @@ export const subscriptionsForRoot = (
     ),
   }))
 
-/** Default drag subscriptions, with the track looked up via `document`. */
+/** Default drag Subscriptions, with the track looked up via `document`. */
 export const subscriptions = subscriptionsForRoot(() => document)
 
 // VIEW
@@ -549,8 +556,8 @@ const keyToDirection = (
 const percentString = (fraction: number): string =>
   `${Math.round(fraction * 10000) / 100}%`
 
-/** Attribute groups the slider component provides to the consumer's `toView`
- *  callback. Each bundle carries the boundary's captured dispatch, so the
+/** Attribute groups the Slider provides to the consumer's `toView`
+ *  callback. Each group carries the boundary's captured dispatch, so the
  *  consumer can spread it directly into element attributes without manual
  *  Message wrapping. */
 export type SliderAttributes = Readonly<{
@@ -562,13 +569,11 @@ export type SliderAttributes = Readonly<{
   hiddenInput: ReadonlyArray<ChildAttribute>
 }>
 
-/** Layout axis for the slider track. Matches the `Orientation` unions on
- *  Tabs, RadioGroup, and Listbox. Lowercased at the DOM attribute boundary. */
+/** Direction in which the Slider lays out its track and maps pointer input. */
 export const Orientation = Schema.Literals(['Horizontal', 'Vertical'])
 export type Orientation = typeof Orientation.Type
 
-/** How the thumb aligns within the track. Lowercased at the DOM attribute
- *  boundary. */
+/** Whether the thumb's center or outer edge aligns with the track endpoints. */
 export const ThumbAlignment = Schema.Literals(['Center', 'Edge'])
 export type ThumbAlignment = typeof ThumbAlignment.Type
 
@@ -577,20 +582,19 @@ const filledTrackStyle = (
   thumbAlignment: ThumbAlignment,
   thumbSize: string,
   fraction: number,
-): Readonly<Record<string, string>> => {
-  if (orientation === 'Vertical') {
-    if (thumbAlignment === 'Center') {
-      return {
-        position: 'absolute',
-        bottom: '0',
-        left: '0',
-        right: '0',
-        height: percentString(fraction),
-        width: '100%',
-        'pointer-events': 'none',
-      }
-    }
-    return {
+): Readonly<Record<string, string>> =>
+  Match.value({ orientation, thumbAlignment }).pipe(
+    Match.withReturnType<Readonly<Record<string, string>>>(),
+    Match.when({ orientation: 'Vertical', thumbAlignment: 'Center' }, () => ({
+      position: 'absolute',
+      bottom: '0',
+      left: '0',
+      right: '0',
+      height: percentString(fraction),
+      width: '100%',
+      'pointer-events': 'none',
+    })),
+    Match.when({ orientation: 'Vertical', thumbAlignment: 'Edge' }, () => ({
       position: 'absolute',
       bottom: '0',
       left: '0',
@@ -598,66 +602,61 @@ const filledTrackStyle = (
       height: `calc((100% - ${thumbSize}) * ${fraction} + ${thumbSize} / 2)`,
       width: '100%',
       'pointer-events': 'none',
-    }
-  }
-  if (thumbAlignment === 'Center') {
-    return {
+    })),
+    Match.when({ orientation: 'Horizontal', thumbAlignment: 'Center' }, () => ({
       position: 'absolute',
       left: '0',
       top: '0',
       bottom: '0',
       width: percentString(fraction),
       'pointer-events': 'none',
-    }
-  }
-  return {
-    position: 'absolute',
-    left: '0',
-    top: '0',
-    bottom: '0',
-    width: `calc((100% - ${thumbSize}) * ${fraction} + ${thumbSize} / 2)`,
-    'pointer-events': 'none',
-  }
-}
+    })),
+    Match.when({ orientation: 'Horizontal', thumbAlignment: 'Edge' }, () => ({
+      position: 'absolute',
+      left: '0',
+      top: '0',
+      bottom: '0',
+      width: `calc((100% - ${thumbSize}) * ${fraction} + ${thumbSize} / 2)`,
+      'pointer-events': 'none',
+    })),
+    Match.exhaustive,
+  )
 
 const thumbStyle = (
   orientation: Orientation,
   thumbAlignment: ThumbAlignment,
   thumbSize: string,
   fraction: number,
-): Readonly<Record<string, string>> => {
-  if (orientation === 'Vertical') {
-    if (thumbAlignment === 'Center') {
-      return {
-        position: 'absolute',
-        bottom: percentString(fraction),
-        left: '50%',
-        transform: 'translateX(-50%) translateY(50%)',
-        'touch-action': 'none',
-      }
-    }
-    return {
+): Readonly<Record<string, string>> =>
+  Match.value({ orientation, thumbAlignment }).pipe(
+    Match.withReturnType<Readonly<Record<string, string>>>(),
+    Match.when({ orientation: 'Vertical', thumbAlignment: 'Center' }, () => ({
+      position: 'absolute',
+      bottom: percentString(fraction),
+      left: '50%',
+      transform: 'translateX(-50%) translateY(50%)',
+      'touch-action': 'none',
+    })),
+    Match.when({ orientation: 'Vertical', thumbAlignment: 'Edge' }, () => ({
       position: 'absolute',
       bottom: `calc((100% - ${thumbSize}) * ${fraction})`,
       left: '50%',
       transform: 'translateX(-50%)',
       'touch-action': 'none',
-    }
-  }
-  if (thumbAlignment === 'Center') {
-    return {
+    })),
+    Match.when({ orientation: 'Horizontal', thumbAlignment: 'Center' }, () => ({
       position: 'absolute',
       left: percentString(fraction),
       transform: 'translateX(-50%)',
       'touch-action': 'none',
-    }
-  }
-  return {
-    position: 'absolute',
-    left: `calc((100% - ${thumbSize}) * ${fraction})`,
-    'touch-action': 'none',
-  }
-}
+    })),
+    Match.when({ orientation: 'Horizontal', thumbAlignment: 'Edge' }, () => ({
+      position: 'absolute',
+      left: `calc((100% - ${thumbSize}) * ${fraction})`,
+      'touch-action': 'none',
+    })),
+    Match.exhaustive,
+  )
 
 /** Per-render view inputs passed to `view` via `h.submodel`'s `viewInputs` field. */
 export type ViewInputs = Readonly<{
@@ -665,14 +664,14 @@ export type ViewInputs = Readonly<{
    *  position, `aria-valuenow`, and the filled track all derive from it. */
   value: number
   toView: (attributes: SliderAttributes) => Html
-  /** Layout axis for the track, range, and thumb. `Vertical` sliders place
-   *  `min` at the bottom and `max` at the top. */
+  /** Layout axis for the track, filled track, and thumb. Vertical Sliders
+   *  place `min` at the bottom and `max` at the top. */
   orientation?: Orientation
   /** How the thumb aligns within the track. `Center` keeps the thumb's
    *  center on the value point and lets it overflow by half its size at the
-   *  extremes, matching the slider's previous behavior. `Edge` insets the
+   *  extremes, matching the Slider's previous behavior. `Edge` insets the
    *  thumb's travel by `thumbSize` so it stays fully inside the track.
-   *  Defaults to `Center` so existing sliders keep their geometry. */
+   *  Defaults to `Center` so existing Sliders keep their geometry. */
   thumbAlignment?: ThumbAlignment
   /** CSS length of the thumb along the track axis, used only when
    *  `thumbAlignment` is `Edge` to inset the thumb's travel and align the
@@ -698,10 +697,9 @@ export type ViewInputs = Readonly<{
    *  way. */
   isReadOnly?: boolean
   name?: string
-  /** Resolves the root that holds the slider track when looking it up by its
-   *  `data-slider-track-id` attribute. Defaults to `document`. Provide a
-   *  ShadowRoot when rendering the slider inside a shadow tree so pointer
-   *  events on the track can map clientX into a value. */
+  /** Resolves the DOM root containing the Slider track. Defaults to `document`.
+   *  Provide a ShadowRoot when rendering the Slider inside a shadow tree so pointer
+   *  events on the track can map the pointer position into a value. */
   getTrackRoot?: () => Document | ShadowRoot
 }>
 
@@ -709,7 +707,7 @@ export type ViewInputs = Readonly<{
  *  delegating layout to the consumer's `toView` callback. Follows the
  *  WAI-ARIA slider pattern: role="slider" on the thumb, aria-valuemin /
  *  aria-valuemax / aria-valuenow, keyboard navigation by step / page / home /
- *  end. Pointer drag is handled by the component's drag subscriptions. */
+ *  end. Pointer drag is handled by the Slider's drag Subscriptions. */
 export const view = defineView<Model, Message, ViewInputs>(
   (model, viewInputs, h): Html => {
     const {
@@ -732,13 +730,13 @@ export const view = defineView<Model, Message, ViewInputs>(
         Message.PressedKeyboardNavigation({ direction, value }),
       )
 
-    const pointerAtPointer = (
+    const pressedPointerMessageAt = (
       clientX: number,
       clientY: number,
     ): Option.Option<Message> =>
-      Option.map(trackElement(id, getTrackRoot()), element =>
+      Option.map(findTrackElement(id, getTrackRoot()), track =>
         Message.PressedPointer({
-          value: valueFromPointer(clientX, clientY, element, min, max),
+          value: valueFromPointer(clientX, clientY, track, min, max),
           originValue: value,
         }),
       )
@@ -755,7 +753,7 @@ export const view = defineView<Model, Message, ViewInputs>(
       pipe(
         button,
         Option.liftPredicate(Equal.equals(LEFT_MOUSE_BUTTON)),
-        Option.flatMap(() => pointerAtPointer(clientX, clientY)),
+        Option.flatMap(() => pressedPointerMessageAt(clientX, clientY)),
       )
 
     const thumbPointerHandler = (
@@ -774,13 +772,12 @@ export const view = defineView<Model, Message, ViewInputs>(
       ...(isReadOnly ? [h.DataAttribute('readonly', '')] : []),
     ]
 
-    const domOrientation = String.toLowerCase(orientation)
-    const domThumbAlignment = String.toLowerCase(thumbAlignment)
+    const orientationAttributeValue = String.toLowerCase(orientation)
 
     const rootAttributes = [
       h.DataAttribute('slider-id', id),
-      h.DataAttribute('orientation', domOrientation),
-      h.DataAttribute(domOrientation, ''),
+      h.DataAttribute('orientation', orientationAttributeValue),
+      h.DataAttribute(orientationAttributeValue, ''),
       ...stateAttributes,
     ]
 
@@ -792,9 +789,9 @@ export const view = defineView<Model, Message, ViewInputs>(
 
     const trackAttributes = [
       h.DataAttribute('slider-track-id', id),
-      h.DataAttribute('orientation', domOrientation),
-      h.DataAttribute(domOrientation, ''),
-      h.DataAttribute('thumb-alignment', domThumbAlignment),
+      h.DataAttribute('orientation', orientationAttributeValue),
+      h.DataAttribute(orientationAttributeValue, ''),
+      h.DataAttribute('thumb-alignment', String.toLowerCase(thumbAlignment)),
       h.Style({ position: 'relative', 'touch-action': 'none' }),
       ...stateAttributes,
       ...trackInteractionAttributes,
@@ -832,7 +829,7 @@ export const view = defineView<Model, Message, ViewInputs>(
       h.Id(`${id}-thumb`),
       h.Role('slider'),
       h.Tabindex(0),
-      h.AriaOrientation(domOrientation),
+      h.AriaOrientation(orientationAttributeValue),
       h.AriaValuemin(min),
       h.AriaValuemax(max),
       h.AriaValuenow(value),

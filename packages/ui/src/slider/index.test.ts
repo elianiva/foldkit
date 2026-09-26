@@ -421,19 +421,24 @@ describe('Slider', () => {
   })
 
   describe('valueFromPointer', () => {
-    const stubRect = (
+    const stubBoundingClientRect = (
       element: Element,
-      rect: { left: number; top: number; width: number; height: number },
+      boundingRect: {
+        left: number
+        top: number
+        width: number
+        height: number
+      },
     ): void => {
       element.getBoundingClientRect = (): DOMRect => ({
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height,
-        right: rect.left + rect.width,
-        bottom: rect.top + rect.height,
-        x: rect.left,
-        y: rect.top,
+        left: boundingRect.left,
+        top: boundingRect.top,
+        width: boundingRect.width,
+        height: boundingRect.height,
+        right: boundingRect.left + boundingRect.width,
+        bottom: boundingRect.top + boundingRect.height,
+        x: boundingRect.left,
+        y: boundingRect.top,
         toJSON: () => ({}),
       })
     }
@@ -442,7 +447,13 @@ describe('Slider', () => {
       const track = document.createElement('div')
       track.setAttribute('data-orientation', 'horizontal')
       track.setAttribute('data-horizontal', '')
-      stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
+      stubBoundingClientRect(track, {
+        left: 0,
+        top: 0,
+        width: 200,
+        height: 20,
+      })
+
       expect(valueFromPointer(50, 10, track, 0, 10)).toBe(2.5)
     })
 
@@ -450,35 +461,62 @@ describe('Slider', () => {
       const track = document.createElement('div')
       track.setAttribute('data-orientation', 'vertical')
       track.setAttribute('data-vertical', '')
-      stubRect(track, { left: 0, top: 0, width: 20, height: 200 })
+      stubBoundingClientRect(track, {
+        left: 0,
+        top: 0,
+        width: 20,
+        height: 200,
+      })
+
       expect(valueFromPointer(10, 50, track, 0, 10)).toBe(7.5)
     })
 
-    it('reads the track element own orientation when nested inside an oppositely-oriented slider', () => {
-      const ancestor = document.createElement('div')
-      ancestor.setAttribute('data-vertical', '')
+    it("reads the track's own orientation when nested inside an oppositely oriented Slider", () => {
+      const verticalAncestor = document.createElement('div')
+      verticalAncestor.setAttribute('data-vertical', '')
+
       const track = document.createElement('div')
       track.setAttribute('data-orientation', 'horizontal')
       track.setAttribute('data-horizontal', '')
-      ancestor.appendChild(track)
-      stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
+      verticalAncestor.appendChild(track)
+      stubBoundingClientRect(track, {
+        left: 0,
+        top: 0,
+        width: 200,
+        height: 20,
+      })
+
       expect(valueFromPointer(50, 10, track, 0, 10)).toBe(2.5)
     })
 
-    it('maps edge-aligned horizontal pointers across the inset thumb range', () => {
-      const root = document.createElement('div')
-      root.setAttribute('data-slider-id', 'edge-horizontal')
+    it("maps horizontal pointers across the edge-aligned thumb's inset travel", () => {
+      const sliderRoot = document.createElement('div')
+      sliderRoot.setAttribute('data-slider-id', 'edge-horizontal')
+
       const track = document.createElement('div')
       track.setAttribute('data-slider-track-id', 'edge-horizontal')
       track.setAttribute('data-orientation', 'horizontal')
       track.setAttribute('data-thumb-alignment', 'edge')
-      stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
+      stubBoundingClientRect(track, {
+        left: 0,
+        top: 0,
+        width: 200,
+        height: 20,
+      })
+
       const thumb = document.createElement('div')
       thumb.id = 'edge-horizontal-thumb'
-      stubRect(thumb, { left: 0, top: 0, width: 20, height: 20 })
-      root.appendChild(track)
-      root.appendChild(thumb)
-      document.body.appendChild(root)
+      stubBoundingClientRect(thumb, {
+        left: 0,
+        top: 0,
+        width: 20,
+        height: 20,
+      })
+
+      sliderRoot.appendChild(track)
+      sliderRoot.appendChild(thumb)
+      document.body.appendChild(sliderRoot)
+
       try {
         expect(valueFromPointer(10, 10, track, 0, 100)).toBe(0)
         expect(valueFromPointer(100, 10, track, 0, 100)).toBe(50)
@@ -486,21 +524,34 @@ describe('Slider', () => {
         expect(valueFromPointer(0, 10, track, 0, 100)).toBe(0)
         expect(valueFromPointer(200, 10, track, 0, 100)).toBe(100)
       } finally {
-        root.remove()
+        sliderRoot.remove()
       }
     })
 
-    it('maps edge-aligned vertical pointers across the inverted inset thumb range', () => {
+    it("maps vertical pointers across the edge-aligned thumb's inverted inset travel", () => {
       const track = document.createElement('div')
       track.setAttribute('data-slider-track-id', 'edge-vertical')
       track.setAttribute('data-orientation', 'vertical')
       track.setAttribute('data-thumb-alignment', 'edge')
-      stubRect(track, { left: 0, top: 0, width: 20, height: 200 })
+      stubBoundingClientRect(track, {
+        left: 0,
+        top: 0,
+        width: 20,
+        height: 200,
+      })
+
       const thumb = document.createElement('div')
       thumb.id = 'edge-vertical-thumb'
-      stubRect(thumb, { left: 0, top: 0, width: 20, height: 20 })
+      stubBoundingClientRect(thumb, {
+        left: 0,
+        top: 0,
+        width: 20,
+        height: 20,
+      })
+
       document.body.appendChild(track)
       document.body.appendChild(thumb)
+
       try {
         expect(valueFromPointer(10, 190, track, 0, 100)).toBe(0)
         expect(valueFromPointer(10, 100, track, 0, 100)).toBe(50)
@@ -513,12 +564,18 @@ describe('Slider', () => {
       }
     })
 
-    it('maps edge-aligned pointers across the full track when the thumb element is absent', () => {
+    it('uses the full track when the edge-aligned thumb is absent', () => {
       const track = document.createElement('div')
       track.setAttribute('data-slider-track-id', 'edge-without-thumb')
       track.setAttribute('data-orientation', 'horizontal')
       track.setAttribute('data-thumb-alignment', 'edge')
-      stubRect(track, { left: 0, top: 0, width: 200, height: 20 })
+      stubBoundingClientRect(track, {
+        left: 0,
+        top: 0,
+        width: 200,
+        height: 20,
+      })
+
       expect(valueFromPointer(0, 10, track, 0, 100)).toBe(0)
       expect(valueFromPointer(100, 10, track, 0, 100)).toBe(50)
       expect(valueFromPointer(200, 10, track, 0, 100)).toBe(100)

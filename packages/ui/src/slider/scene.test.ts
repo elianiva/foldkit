@@ -198,78 +198,48 @@ describe('Slider', () => {
     })
   })
 
-  describe('vertical geometry', () => {
-    it('centers the thumb on the value point at min, mid, and max', () => {
+  describe('vertical Slider geometry', () => {
+    it.each([
+      { value: 0, bottom: '0%' },
+      { value: 5, bottom: '50%' },
+      { value: 10, bottom: '100%' },
+    ])('positions the centered thumb at value $value', ({ value, bottom }) => {
       Scene.scene(
-        { update, view: sceneView({ orientation: 'Vertical', value: 0 }) },
+        { update, view: sceneView({ orientation: 'Vertical', value }) },
         Scene.given(defaultModel),
-        Scene.expect(thumb).toHaveStyle('bottom', '0%'),
+        Scene.expect(thumb).toHaveStyle('bottom', bottom),
         Scene.expect(thumb).toHaveStyle('left', '50%'),
         Scene.expect(thumb).toHaveStyle(
           'transform',
           'translateX(-50%) translateY(50%)',
         ),
       )
-      Scene.scene(
-        { update, view: sceneView({ orientation: 'Vertical', value: 5 }) },
-        Scene.given(defaultModel),
-        Scene.expect(thumb).toHaveStyle('bottom', '50%'),
-      )
-      Scene.scene(
-        { update, view: sceneView({ orientation: 'Vertical', value: 10 }) },
-        Scene.given(defaultModel),
-        Scene.expect(thumb).toHaveStyle('bottom', '100%'),
-        Scene.expect(thumb).toHaveStyle(
-          'transform',
-          'translateX(-50%) translateY(50%)',
-        ),
-      )
     })
 
-    it('insets edge-aligned travel by the thumb size at min, mid, and max', () => {
-      Scene.scene(
-        {
-          update,
-          view: sceneView({
-            orientation: 'Vertical',
-            thumbAlignment: 'Edge',
-            value: 0,
-          }),
-        },
-        Scene.given(defaultModel),
-        Scene.expect(thumb).toHaveStyle('bottom', 'calc((100% - 0.75rem) * 0)'),
-        Scene.expect(thumb).toHaveStyle('transform', 'translateX(-50%)'),
-      )
-      Scene.scene(
-        {
-          update,
-          view: sceneView({
-            orientation: 'Vertical',
-            thumbAlignment: 'Edge',
-            value: 5,
-          }),
-        },
-        Scene.given(defaultModel),
-        Scene.expect(thumb).toHaveStyle(
-          'bottom',
-          'calc((100% - 0.75rem) * 0.5)',
-        ),
-      )
-      Scene.scene(
-        {
-          update,
-          view: sceneView({
-            orientation: 'Vertical',
-            thumbAlignment: 'Edge',
-            value: 10,
-          }),
-        },
-        Scene.given(defaultModel),
-        Scene.expect(thumb).toHaveStyle('bottom', 'calc((100% - 0.75rem) * 1)'),
-      )
-    })
+    it.each([
+      { value: 0, bottom: 'calc((100% - 0.75rem) * 0)' },
+      { value: 5, bottom: 'calc((100% - 0.75rem) * 0.5)' },
+      { value: 10, bottom: 'calc((100% - 0.75rem) * 1)' },
+    ])(
+      'positions the edge-aligned thumb at value $value',
+      ({ value, bottom }) => {
+        Scene.scene(
+          {
+            update,
+            view: sceneView({
+              orientation: 'Vertical',
+              thumbAlignment: 'Edge',
+              value,
+            }),
+          },
+          Scene.given(defaultModel),
+          Scene.expect(thumb).toHaveStyle('bottom', bottom),
+          Scene.expect(thumb).toHaveStyle('transform', 'translateX(-50%)'),
+        )
+      },
+    )
 
-    it('sizes edge-aligned travel from the thumbSize input', () => {
+    it('uses thumbSize to position the edge-aligned thumb', () => {
       Scene.scene(
         {
           update,
@@ -305,7 +275,7 @@ describe('Slider', () => {
   })
 
   describe('thumb alignment attributes', () => {
-    it('marks the track with data-thumb-alignment=center by default', () => {
+    it('marks the track with data-thumb-alignment="center" by default', () => {
       Scene.scene(
         { update, view: sceneView() },
         Scene.given(defaultModel),
@@ -313,7 +283,7 @@ describe('Slider', () => {
       )
     })
 
-    it('marks the track with data-thumb-alignment=edge for pointer mapping', () => {
+    it('marks the track with data-thumb-alignment="edge" for pointer mapping', () => {
       Scene.scene(
         { update, view: sceneView({ thumbAlignment: 'Edge' }) },
         Scene.given(defaultModel),

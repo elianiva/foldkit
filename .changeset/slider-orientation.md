@@ -2,4 +2,4 @@
 '@foldkit/ui': minor
 ---
 
-Slider supports vertical layouts and opt-in edge alignment. `orientation` takes `Horizontal` or `Vertical` (matching the Tabs, RadioGroup, and Listbox unions) and switches `aria-orientation`, pointer mapping, and filled-track sizing, with `min` at the bottom for vertical sliders. `thumbAlignment` defaults to `Center`, which keeps the thumb's center on the value point and preserves existing slider geometry. Pass `Edge` with `thumbSize` set to your thumb's styled size to keep the thumb fully inside the track at the extremes. DOM attributes stay lowercase.
+Slider now supports vertical layouts and opt-in edge-aligned thumbs. Set `orientation` to `Vertical` to place `min` at the bottom and `max` at the top, update `aria-orientation`, and map pointer movement along the vertical axis. Existing Sliders remain horizontal and center-aligned by default. Set `thumbAlignment` to `Edge` and provide the rendered `thumbSize` to keep the thumb inside the track and align pointer input with its inset travel.
