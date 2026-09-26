@@ -91,6 +91,8 @@ export const AppRoute = defineRouteUnion({
   UiRadioGroup: {},
   UiSelect: {},
   UiSlider: {},
+  UiMeter: {},
+  UiProgress: {},
   UiSwitch: {},
   UiCombobox: {},
   UiInput: {},
@@ -104,8 +106,6 @@ export const AppRoute = defineRouteUnion({
   UiAnimation: {},
   UiAnchor: {},
   UiVirtualList: {},
-  UiMeter: {},
-  UiProgress: {},
   About: {},
   Contact: {},
   Privacy: {},
@@ -195,6 +195,8 @@ export const DocsRoute = AppRoute.subset([
   'UiRadioGroup',
   'UiSelect',
   'UiSlider',
+  'UiMeter',
+  'UiProgress',
   'UiSwitch',
   'UiCombobox',
   'UiInput',
@@ -208,8 +210,6 @@ export const DocsRoute = AppRoute.subset([
   'UiAnimation',
   'UiAnchor',
   'UiVirtualList',
-  'UiMeter',
-  'UiProgress',
   'AiOverview',
   'AiSkills',
   'AiMcp',
@@ -468,6 +468,8 @@ export const uiListboxRouter = ui('listbox', AppRoute.UiListbox)
 export const uiRadioGroupRouter = ui('radio-group', AppRoute.UiRadioGroup)
 export const uiSelectRouter = ui('select', AppRoute.UiSelect)
 export const uiSliderRouter = ui('slider', AppRoute.UiSlider)
+export const uiMeterRouter = ui('meter', AppRoute.UiMeter)
+export const uiProgressRouter = ui('progress', AppRoute.UiProgress)
 export const uiSwitchRouter = ui('switch', AppRoute.UiSwitch)
 export const uiComboboxRouter = ui('combobox', AppRoute.UiCombobox)
 export const uiInputRouter = ui('input', AppRoute.UiInput)
@@ -481,8 +483,6 @@ export const uiTooltipRouter = ui('tooltip', AppRoute.UiTooltip)
 export const uiAnimationRouter = ui('animation', AppRoute.UiAnimation)
 export const uiAnchorRouter = ui('anchor', AppRoute.UiAnchor)
 export const uiVirtualListRouter = ui('virtual-list', AppRoute.UiVirtualList)
-export const uiMeterRouter = ui('meter', AppRoute.UiMeter)
-export const uiProgressRouter = ui('progress', AppRoute.UiProgress)
 
 export const aboutRouter = staticPage('about', AppRoute.About)
 export const contactRouter = staticPage('contact', AppRoute.Contact)
@@ -594,6 +594,8 @@ const uiParser = oneOf(
   uiRadioGroupRouter,
   uiSelectRouter,
   uiSliderRouter,
+  uiMeterRouter,
+  uiProgressRouter,
   uiSwitchRouter,
   uiComboboxRouter,
   uiInputRouter,
@@ -607,8 +609,6 @@ const uiParser = oneOf(
   uiAnimationRouter,
   uiAnchorRouter,
   uiVirtualListRouter,
-  uiMeterRouter,
-  uiProgressRouter,
 )
 
 const aiParser = oneOf(aiOverviewRouter, aiSkillsRouter, aiMcpRouter)
@@ -754,6 +754,8 @@ export const routeToUrlPath = (route: AppRoute): string =>
     UiRadioGroup: () => uiRadioGroupRouter(),
     UiSelect: () => uiSelectRouter(),
     UiSlider: () => uiSliderRouter(),
+    UiMeter: () => uiMeterRouter(),
+    UiProgress: () => uiProgressRouter(),
     UiSwitch: () => uiSwitchRouter(),
     UiButton: () => uiButtonRouter(),
     UiCalendar: () => uiCalendarRouter(),

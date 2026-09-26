@@ -2,17 +2,17 @@
 
 ## Overview
 
-A scalar value within a known range, such as health, storage used, or battery level. Meter is a stateless controlled render helper. Your Model owns the numeric value. Meter clamps it into `[min, max]` and provides the `role="meter"` and value attributes. For task completion with an unknown duration, use Progress instead.
+Meter displays a scalar quantity within a known range, such as remaining storage, battery charge, or a health level. It is a stateless controlled view: your Model owns the value, and Meter provides the ARIA and styling attributes. Use Progress instead when the value represents completion of a task.
 
 :::Info{label="See it in an app"}
-Check out how Meter could replace a hand-rolled meter in a [Foldkit app](https://github.com/foldkit/foldkit/issues/888).
+Check out how Meter is wired up in a [real Foldkit app](https://github.com/foldkit/foldkit/blob/main/examples/ui-showcase/src/ui/view/meter.ts).
 :::
 
 ## Examples
 
 ### Basic
 
-Pass `value`, `max`, and an accessible name. Spread `attributes.meter` onto the track and `attributes.fill` onto the inner bar. The fill width reflects the current value as a percentage of the range.
+Pass the current `value` and render the provided attribute groups. Spread `attributes.label` onto the visible label, `attributes.meter` onto the element that carries the meter role, and `attributes.fill` onto the filled portion. The fill width reflects the value's position within the range.
 
 ::Demo{name="basic"}
 
@@ -20,35 +20,34 @@ Pass `value`, `max`, and an accessible name. Spread `attributes.meter` onto the 
 
 ### Thresholds
 
-`low`, `high`, and `optimum` mark ideal and warning zones. They appear as `data-low`, `data-high`, and `data-optimum` on the meter element for styling.
+`low`, `high`, and `optimum` expose application-specific thresholds as `data-low`, `data-high`, and `data-optimum`. They do not change the Meter's ARIA attributes; use them to style the ranges your application considers low, high, or optimal.
 
 ::Demo{name="thresholds"}
 
 ## Styling
 
-Meter is headless. Your `toView` callback controls all markup and styling. Use the data attributes below to style the track and fill.
+Meter is headless. Your `toView` callback controls its markup and styling.
 
-| Attribute      | Condition                                               |
-| -------------- | ------------------------------------------------------- |
-| `data-value`   | Present on meter and fill as the clamped value.         |
-| `data-min`     | Present on meter as the minimum value.                  |
-| `data-max`     | Present on meter and fill as the maximum value.         |
-| `data-state`   | `complete` when value reaches max, otherwise `loading`. |
-| `data-low`     | Present when `low` is set.                              |
-| `data-high`    | Present when `high` is set.                             |
-| `data-optimum` | Present when `optimum` is set.                          |
+| Attribute      | Condition                                                  |
+| -------------- | ---------------------------------------------------------- |
+| `data-value`   | Present on `meter` and `fill` with the clamped value.      |
+| `data-min`     | Present on `meter` and `fill` with the normalized minimum. |
+| `data-max`     | Present on `meter` and `fill` with the normalized maximum. |
+| `data-low`     | Present on `meter` when `low` is set.                      |
+| `data-high`    | Present on `meter` when `high` is set.                     |
+| `data-optimum` | Present on `meter` when `optimum` is set.                  |
 
-The `fill` attribute group carries an inline `width` so the filled portion matches the current value.
+The `fill` attribute group carries an inline `width` matching the value's position within the normalized range. Meter intentionally has no `loading` or `complete` state because it describes a measurement, not task progress.
 
 ## Accessibility
 
-The meter element receives `role="meter"`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, and an accessible name via `aria-label` or `aria-labelledby`. When `valueText` is provided, it is announced via `aria-valuetext` and should read as natural language such as `75 of 100 health`. `valueText` accepts a `string` or a `(value, max) => string` function.
+The meter element receives `role="meter"`, `aria-valuemin`, `aria-valuemax`, and `aria-valuenow`. By default, it is named through `aria-labelledby`, which points to the id carried by the `label` attribute group. Use `ariaLabel` when there is no visible label, or `ariaLabelledBy` to reference a different labeling element. When both overrides are provided, `ariaLabel` takes precedence.
 
-At least one of `ariaLabel` and `ariaLabelledBy` is required by the type. If neither is provided at runtime, Meter falls back to `aria-labelledby` pointing at the id carried on the `label` attribute group. The `label` group is reachable via `Meter.labelId(id)`.
+Use `valueText` when the number needs a natural-language equivalent. It accepts either a string or a `(value, max) => string` formatter and sets `aria-valuetext` from the clamped value.
 
-Meter values are clamped into `[min, max]` before `aria-valuenow` is set. This prevents a screen reader from announcing a value outside the declared range.
+Meter clamps `value` into `[min, max]`. If `max` is lower than `min`, it is normalized to `min` before any ARIA or data attributes are emitted, so the rendered range remains valid.
 
-Meter is not interactive and has no keyboard interaction.
+Meter is read-only and has no keyboard interaction.
 
 ## API Reference
 
@@ -56,26 +55,26 @@ Meter is not interactive and has no keyboard interaction.
 
 Configuration object passed to `Meter.view()`.
 
-| Name             | Type                                                 | Default | Description                                                                                     |
-| ---------------- | ---------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| `id`             | `string`                                             | —       | Unique ID for the meter instance. Used to link the label via ARIA.                              |
-| `value`          | `number`                                             | —       | Current scalar value. Clamped into `[min, max]` for `aria-valuenow` and the fill width.         |
-| `min`            | `number`                                             | `0`     | Lower bound of the range.                                                                       |
-| `max`            | `number`                                             | `100`   | Upper bound of the range.                                                                       |
-| `low`            | `number`                                             | —       | Threshold below which the value is considered low. Exposed as `data-low` for styling.           |
-| `high`           | `number`                                             | —       | Threshold above which the value is considered high. Exposed as `data-high` for styling.         |
-| `optimum`        | `number`                                             | —       | Optimal value in the range. Exposed as `data-optimum` for styling.                              |
-| `valueText`      | `string \| ((value: number, max: number) => string)` | —       | Human readable text for `aria-valuetext`. Use it when the numeric value needs natural language. |
-| `ariaLabel`      | `string`                                             | —       | Accessible name. At least one of `ariaLabel` and `ariaLabelledBy` is required.                  |
-| `ariaLabelledBy` | `string`                                             | —       | ID of an external element whose text serves as the meter accessible name.                       |
-| `toView`         | `(attributes: MeterAttributes) => Html`              | —       | Callback that receives attribute groups for the meter, fill, and label elements.                |
+| Name             | Type                                                 | Default | Description                                                               |
+| ---------------- | ---------------------------------------------------- | ------- | ------------------------------------------------------------------------- |
+| `id`             | `string`                                             | —       | Unique id for the Meter and its generated label id.                       |
+| `value`          | `number`                                             | —       | Current scalar value. Clamped into the normalized range.                  |
+| `min`            | `number`                                             | `0`     | Lower bound of the range.                                                 |
+| `max`            | `number`                                             | `100`   | Upper bound of the range. Normalized to at least `min`.                   |
+| `low`            | `number`                                             | —       | Value exposed as `data-low` for consumer styling.                         |
+| `high`           | `number`                                             | —       | Value exposed as `data-high` for consumer styling.                        |
+| `optimum`        | `number`                                             | —       | Value exposed as `data-optimum` for consumer styling.                     |
+| `valueText`      | `string \| ((value: number, max: number) => string)` | —       | Natural-language value exposed through `aria-valuetext`.                  |
+| `ariaLabel`      | `string`                                             | —       | Accessible name used instead of the rendered label.                       |
+| `ariaLabelledBy` | `string`                                             | —       | Id of a different element that labels the Meter.                          |
+| `toView`         | `(attributes: MeterAttributes) => Html`              | —       | Renders the Meter from the `meter`, `fill`, and `label` attribute groups. |
 
 ### MeterAttributes {#meter-attributes}
 
 Attribute groups provided to the `toView` callback.
 
-| Name    | Type                                | Default | Description                                                                                        |
-| ------- | ----------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
-| `meter` | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the meter container. Includes `role="meter"`, aria value attributes, and data markers. |
-| `fill`  | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the inner bar. Its inline width reflects the current value as a percentage.            |
-| `label` | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the visible label element. Includes the id that `aria-labelledby` can reference.       |
+| Name    | Type                                | Default | Description                                                                                     |
+| ------- | ----------------------------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `meter` | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the element carrying the meter role, ARIA value attributes, and data attributes.    |
+| `fill`  | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the filled portion. Includes the calculated inline width and range data attributes. |
+| `label` | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the visible label. Includes the id referenced by `aria-labelledby` by default.      |

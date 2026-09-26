@@ -4,9 +4,9 @@ import type { Html } from 'foldkit/html'
 import { type CodeBlock } from '../../component'
 import { slotDocPage } from '../../markdown'
 import { type RenderHeadingLink, demoContainer } from '../../prose'
+import * as Progress from './demo/progress'
 import type { Message } from './message'
 import type { Model } from './model'
-import * as Progress from './progress'
 import raw from './progressPage.md'
 
 const { tableOfContents, view: renderPage } = slotDocPage<
