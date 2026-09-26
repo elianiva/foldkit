@@ -17,7 +17,15 @@ import { modifyFields } from 'foldkit/struct'
 import { type Reflect, defineView } from 'foldkit/submodel'
 import * as Subscription from 'foldkit/subscription'
 
+import { accessibleNameAttributes } from '../internal/accessibleName.js'
+import {
+  clamp,
+  fractionOfValue,
+  percentageFromFraction,
+} from '../internal/range.js'
 import { attributeSelector, idSelector } from '../internal/selectors.js'
+
+export { fractionOfValue } from '../internal/range.js'
 
 // MODEL
 
@@ -123,9 +131,6 @@ const roundToStepPrecision = (value: number, step: number): number => {
   return Number(value.toFixed(decimals))
 }
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(Math.max(value, min), max)
-
 /** Snaps a value to the nearest step and clamps it into `[min, max]`. Exported
  *  so a parent can conform the value it owns to the Slider's range, for example
  *  when seeding the initial value or reacting to an external update. */
@@ -137,21 +142,6 @@ export const snapAndClamp = (
 ): number => {
   const snapped = min + Math.round((value - min) / step) * step
   return roundToStepPrecision(clamp(snapped, min, max), step)
-}
-
-/** Computes the fraction (0–1) of a value between min and max. Returns 0 when
- *  the range has zero width. */
-export const fractionOfValue = (
-  value: number,
-  min: number,
-  max: number,
-): number => {
-  const range = max - min
-  if (range <= 0) {
-    return 0
-  } else {
-    return clamp((value - min) / range, 0, 1)
-  }
 }
 
 const PAGE_STEP_MULTIPLIER = 10
@@ -553,9 +543,6 @@ const keyToDirection = (
     Match.option,
   )
 
-const percentString = (fraction: number): string =>
-  `${Math.round(fraction * 10000) / 100}%`
-
 /** Attribute groups the Slider provides to the consumer's `toView`
  *  callback. Each group carries the boundary's captured dispatch, so the
  *  consumer can spread it directly into element attributes without manual
@@ -590,7 +577,7 @@ const filledTrackStyle = (
       bottom: '0',
       left: '0',
       right: '0',
-      height: percentString(fraction),
+      height: percentageFromFraction(fraction),
       width: '100%',
       'pointer-events': 'none',
     })),
@@ -608,7 +595,7 @@ const filledTrackStyle = (
       left: '0',
       top: '0',
       bottom: '0',
-      width: percentString(fraction),
+      width: percentageFromFraction(fraction),
       'pointer-events': 'none',
     })),
     Match.when({ orientation: 'Horizontal', thumbAlignment: 'Edge' }, () => ({
@@ -632,7 +619,7 @@ const thumbStyle = (
     Match.withReturnType<Readonly<Record<string, string>>>(),
     Match.when({ orientation: 'Vertical', thumbAlignment: 'Center' }, () => ({
       position: 'absolute',
-      bottom: percentString(fraction),
+      bottom: percentageFromFraction(fraction),
       left: '50%',
       transform: 'translateX(-50%) translateY(50%)',
       'touch-action': 'none',
@@ -646,7 +633,7 @@ const thumbStyle = (
     })),
     Match.when({ orientation: 'Horizontal', thumbAlignment: 'Center' }, () => ({
       position: 'absolute',
-      left: percentString(fraction),
+      left: percentageFromFraction(fraction),
       transform: 'translateX(-50%)',
       'touch-action': 'none',
     })),
@@ -804,17 +791,14 @@ export const view = defineView<Model, Message, ViewInputs>(
       ...stateAttributes,
     ]
 
-    const resolveThumbLabel = () => {
-      if (viewInputs.ariaLabel !== undefined) {
-        return [h.AriaLabel(viewInputs.ariaLabel)]
-      } else if (viewInputs.ariaLabelledBy !== undefined) {
-        return [h.AriaLabelledBy(viewInputs.ariaLabelledBy)]
-      } else {
-        return [h.AriaLabelledBy(labelId(id))]
-      }
-    }
-
-    const thumbLabelAttributes = resolveThumbLabel()
+    const thumbLabelAttributes = accessibleNameAttributes(
+      {
+        ariaLabel: viewInputs.ariaLabel,
+        ariaLabelledBy: viewInputs.ariaLabelledBy,
+        fallbackLabelId: labelId(id),
+      },
+      h,
+    )
     const maybeAriaValuetext =
       formatValue !== undefined ? [h.AriaValuetext(formatValue(value))] : []
 

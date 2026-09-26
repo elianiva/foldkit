@@ -2,7 +2,7 @@ import type { HtmlBuilder } from 'foldkit/html'
 
 import { Meter } from '@foldkit/ui'
 
-import { Message } from './message'
+import { Message } from '../message'
 
 // DEMO CONTENT
 
@@ -20,7 +20,6 @@ export const basicDemo = (h: HtmlBuilder<Message>) => {
         id: 'meter-basic-demo',
         value: 75,
         max: 100,
-        ariaLabel: 'Health',
         valueText: '75 of 100 health',
         toView: attributes =>
           h.div(
@@ -59,14 +58,13 @@ export const thresholdsDemo = (h: HtmlBuilder<Message>) => {
     Meter.view(
       {
         id: 'meter-thresholds-demo',
-        value: 25,
+        value: 82,
         min: 0,
         max: 100,
         low: 30,
         high: 80,
-        optimum: 90,
-        ariaLabel: 'Storage',
-        valueText: '25 of 100 used',
+        optimum: 20,
+        valueText: '82 percent used',
         toView: attributes =>
           h.div(
             [h.Class('flex flex-col gap-2 w-full max-w-sm')],
@@ -83,7 +81,7 @@ export const thresholdsDemo = (h: HtmlBuilder<Message>) => {
                   ),
                   h.span(
                     [h.Class('tabular-nums text-gray-600 dark:text-gray-400')],
-                    ['25%'],
+                    ['82%'],
                   ),
                 ],
               ),
@@ -93,7 +91,7 @@ export const thresholdsDemo = (h: HtmlBuilder<Message>) => {
               ),
               h.span(
                 [h.Class('text-xs text-gray-500 dark:text-gray-400')],
-                ['low 30, high 80, optimum 90 as data attributes'],
+                ['low 30, high 80, optimum 20 as data attributes'],
               ),
             ],
           ),

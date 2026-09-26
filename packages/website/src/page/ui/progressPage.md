@@ -2,17 +2,17 @@
 
 ## Overview
 
-Task completion with a known or unknown duration, such as file upload or loading. Progress is a stateless controlled render helper. Your Model owns the numeric value. Progress provides the `role="progressbar"` and value attributes and supports an indeterminate state when the duration is not known. For a scalar that stays in a known range such as health or storage, use Meter instead.
+Progress reports completion of a task, such as uploading a file or loading a page. It is a stateless controlled view: your Model owns a determinate value when one is known, while omitting `value` renders indeterminate progress. Use Meter instead for a scalar measurement that is not task completion.
 
 :::Info{label="See it in an app"}
-Check out how Progress could replace a hand-rolled progress bar in a [Foldkit app](https://github.com/foldkit/foldkit/issues/888).
+Check out how Progress is wired up in a [real Foldkit app](https://github.com/foldkit/foldkit/blob/main/examples/ui-showcase/src/ui/view/progress.ts).
 :::
 
 ## Examples
 
-### Basic
+### Determinate
 
-Pass `value`, `max`, and an accessible name. Spread `attributes.progress` onto the track and `attributes.indicator` onto the inner bar. The indicator width reflects the current value as a percentage of the range.
+Pass `value` when the amount completed is known. Spread `attributes.label` onto the visible label, `attributes.progress` onto the element that carries the progressbar role, and `attributes.indicator` onto the filled portion. The indicator width reflects the value's position within the range.
 
 ::Demo{name="basic"}
 
@@ -20,7 +20,7 @@ Pass `value`, `max`, and an accessible name. Spread `attributes.progress` onto t
 
 ### Indeterminate
 
-Omit `value` or pass `null` to render an indeterminate indicator. The progress element omits `aria-valuemin`, `aria-valuemax`, and `aria-valuenow`, and exposes `data-state="indeterminate"` and `data-indeterminate` for animated skeletons.
+Omit `value` when progress cannot yet be quantified. The progressbar then omits `aria-valuemin`, `aria-valuemax`, and `aria-valuenow`. The `progress`, `track`, and `indicator` groups receive `data-state="indeterminate"` and `data-indeterminate` so the consumer can provide an appropriate animation.
 
 ::Demo{name="indeterminate"}
 
@@ -28,26 +28,27 @@ Omit `value` or pass `null` to render an indeterminate indicator. The progress e
 
 ## Styling
 
-Progress is headless. Your `toView` callback controls all markup and styling. Use the data attributes below to style determinate and indeterminate states.
+Progress is headless. Your `toView` callback controls its markup and styling.
 
-| Attribute            | Condition                                                                |
-| -------------------- | ------------------------------------------------------------------------ |
-| `data-value`         | Present on progress and indicator when determinate as the clamped value. |
-| `data-max`           | Present on progress and indicator when determinate as the maximum value. |
-| `data-state`         | `loading`, `complete`, or `indeterminate`.                               |
-| `data-indeterminate` | Present when indeterminate.                                              |
+| Attribute            | Condition                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `data-value`         | Present on `progress` and `indicator` with the clamped determinate value.                   |
+| `data-min`           | Present on `progress` and `indicator` with the normalized minimum.                          |
+| `data-max`           | Present on `progress` and `indicator` with the normalized maximum.                          |
+| `data-state`         | Present on `progress`, `track`, and `indicator`: `loading`, `complete`, or `indeterminate`. |
+| `data-indeterminate` | Present on `progress`, `track`, and `indicator` when value is omitted.                      |
 
-When determinate, the `indicator` attribute group carries an inline `width` so the filled portion matches the current value. When indeterminate, no width is set so you can animate by other means.
+For determinate progress, `indicator` carries an inline `width` matching the value's position within the normalized range. Indeterminate progress leaves the width entirely to consumer styling.
 
 ## Accessibility
 
-The progress element receives `role="progressbar"` and an accessible name via `aria-label` or `aria-labelledby`. When determinate it also receives `aria-valuemin`, `aria-valuemax`, and `aria-valuenow`. When indeterminate those three attributes are omitted and a screen reader announces the element as busy. When `valueText` is provided, it is announced via `aria-valuetext` for both states and should read as natural language such as `42 percent` or `Loading`. `valueText` accepts a `string` or a `(value, max) => string` function.
+The progressbar receives `role="progressbar"` and an accessible name. By default, it is named through `aria-labelledby`, which points to the id carried by the `label` attribute group. Use `ariaLabel` when there is no visible label, or `ariaLabelledBy` to reference a different labeling element. When both overrides are provided, `ariaLabel` takes precedence.
 
-At least one of `ariaLabel` and `ariaLabelledBy` is required by the type. If neither is provided at runtime, Progress falls back to `aria-labelledby` pointing at the id carried on the `label` attribute group. The `label` group is reachable via `Progress.labelId(id)`.
+Determinate progress receives `aria-valuemin`, `aria-valuemax`, and `aria-valuenow`. The value is clamped into `[min, max]`; if `max` is lower than `min`, it is normalized to `min` before the attributes are emitted. Indeterminate progress omits all three numeric ARIA attributes to communicate that its current value is unknown.
 
-Determinate values are clamped into `[min, max]` before `aria-valuenow` is set. This prevents a screen reader from announcing a value outside the declared range.
+`valueText` accepts either a string or a `(value, max) => string` formatter. Strings work for both states. The formatter is evaluated only for determinate progress, because indeterminate progress has no numeric value to format.
 
-Progress is not interactive and has no keyboard interaction.
+Progress is read-only and has no keyboard interaction.
 
 ## API Reference
 
@@ -55,24 +56,24 @@ Progress is not interactive and has no keyboard interaction.
 
 Configuration object passed to `Progress.view()`.
 
-| Name             | Type                                                 | Default | Description                                                                                     |
-| ---------------- | ---------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| `id`             | `string`                                             | —       | Unique ID for the progress instance. Used to link the label via ARIA.                           |
-| `value`          | `number \| null \| undefined`                        | —       | Current value. `null` or `undefined` renders indeterminate state with no `aria-valuenow`.       |
-| `min`            | `number`                                             | `0`     | Lower bound of the range. Only emitted when determinate.                                        |
-| `max`            | `number`                                             | `100`   | Upper bound of the range. Only emitted when determinate.                                        |
-| `valueText`      | `string \| ((value: number, max: number) => string)` | —       | Human readable text for `aria-valuetext`. Use it when the numeric value needs natural language. |
-| `ariaLabel`      | `string`                                             | —       | Accessible name. At least one of `ariaLabel` and `ariaLabelledBy` is required.                  |
-| `ariaLabelledBy` | `string`                                             | —       | ID of an external element whose text serves as the progress accessible name.                    |
-| `toView`         | `(attributes: ProgressAttributes) => Html`           | —       | Callback that receives attribute groups for the progress, track, indicator, and label elements. |
+| Name             | Type                                                 | Default | Description                                                                               |
+| ---------------- | ---------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| `id`             | `string`                                             | —       | Unique id for Progress and its generated label id.                                        |
+| `value`          | `number \| undefined`                                | —       | Current task progress. Omit it to render indeterminate progress.                          |
+| `min`            | `number`                                             | `0`     | Lower bound of determinate progress.                                                      |
+| `max`            | `number`                                             | `100`   | Upper bound of determinate progress. Normalized to at least `min`.                        |
+| `valueText`      | `string \| ((value: number, max: number) => string)` | —       | Natural-language value; formatters run only for determinate progress.                     |
+| `ariaLabel`      | `string`                                             | —       | Accessible name used instead of the rendered label.                                       |
+| `ariaLabelledBy` | `string`                                             | —       | Id of a different element that labels Progress.                                           |
+| `toView`         | `(attributes: ProgressAttributes) => Html`           | —       | Renders Progress from the `progress`, `track`, `indicator`, and `label` attribute groups. |
 
 ### ProgressAttributes {#progress-attributes}
 
 Attribute groups provided to the `toView` callback.
 
-| Name        | Type                                | Default | Description                                                                                                                  |
-| ----------- | ----------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `progress`  | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the progress container. Includes `role="progressbar"`, aria value attributes when determinate, and data markers. |
-| `track`     | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the track element used as positioning context. Includes `data-state`.                                            |
-| `indicator` | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the inner bar. Its inline width reflects the current value when determinate.                                     |
-| `label`     | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the visible label element. Includes the id that `aria-labelledby` can reference.                                 |
+| Name        | Type                                | Default | Description                                                                                                |
+| ----------- | ----------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `progress`  | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the element carrying the progressbar role, accessible name, and state attributes.              |
+| `track`     | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto an optional track element. Includes the current state attributes.                              |
+| `indicator` | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the moving or filled indicator. Includes state and determinate range attributes when relevant. |
+| `label`     | `ReadonlyArray<Attribute<Message>>` | —       | Spread onto the visible label. Includes the id referenced by `aria-labelledby` by default.                 |

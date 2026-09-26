@@ -1,109 +1,79 @@
 import type { Attribute, Html, HtmlBuilder } from 'foldkit/html'
 
-import { clamp, fractionOfValue, percentString } from '../internal/range.js'
+import { accessibleNameAttributes } from '../internal/accessibleName.js'
+import {
+  clamp,
+  fractionOfValue,
+  normalizeRangeMax,
+  percentageFromFraction,
+} from '../internal/range.js'
 
 // VIEW
 
-/** Attribute groups the meter provides to the consumer's `toView` callback.
- *  Each group is a `ReadonlyArray<Attribute<Message>>` the consumer spreads
- *  into its own element attribute arrays. */
+/** Attribute groups provided to a Meter view. */
 export type MeterAttributes<Message> = Readonly<{
   meter: ReadonlyArray<Attribute<Message>>
   label: ReadonlyArray<Attribute<Message>>
   fill: ReadonlyArray<Attribute<Message>>
 }>
 
-/** Per-render view configuration for the stateless controlled {@link view}.
- *  Generic over `Message` (the message universe of the frame the meter is
- *  rendered in).
- *
- *  - `id`: base id for the meter element. The label id derives from it via
- *    {@link labelId}.
- *  - `value`: current scalar value. Clamped into `[min, max]` for
- *    `aria-valuenow` and the fill width.
- *  - `min`: lower bound of the range. Defaults to `0`.
- *  - `max`: upper bound of the range. Defaults to `100`.
- *  - `low` / `high` / `optimum`: optional thresholds for styling via
- *    `data-low`, `data-high`, and `data-optimum` on the meter element.
- *  - `valueText`: optional human readable text for `aria-valuetext`.
- *  - `toView`: receives the {@link MeterAttributes} and lays out the meter.
- *  - `ariaLabel` / `ariaLabelledBy`: accessible name, at least one is
- *    required. */
-export type ViewConfig<Message> = Readonly<
-  {
-    id: string
-    value: number
-    min?: number
-    max?: number
-    low?: number
-    high?: number
-    optimum?: number
-    valueText?: string | ((value: number, max: number) => string)
-    toView: (attributes: MeterAttributes<Message>) => Html
-  } & (
-    | { ariaLabel: string }
-    | { ariaLabelledBy: string }
-    | { ariaLabel: string; ariaLabelledBy: string }
-  )
->
+/** Configuration for rendering a Meter with {@link view}. */
+export type ViewConfig<Message> = Readonly<{
+  id: string
+  value: number
+  min?: number
+  max?: number
+  low?: number
+  high?: number
+  optimum?: number
+  valueText?: string | ((value: number, max: number) => string)
+  ariaLabel?: string
+  ariaLabelledBy?: string
+  toView: (attributes: MeterAttributes<Message>) => Html
+}>
 
 /** Returns the label element id, derived from the meter's base id. */
 export const labelId = (id: string): string => `${id}-label`
 
-/**
- * Renders an accessible meter as a stateless controlled component.
- *
- * Takes the consumer's builder, which pins `Message` to the universe of the
- * frame the meter is rendered in.
- */
+/** Renders an accessible meter as a stateless controlled view. */
 export const view = <Message>(
   config: ViewConfig<Message>,
   h: HtmlBuilder<Message>,
 ): Html => {
   const min = config.min ?? 0
-  const max = config.max ?? 100
+  const max = normalizeRangeMax(min, config.max ?? 100)
   const clampedValue = clamp(config.value, min, max)
   const fraction = fractionOfValue(clampedValue, min, max)
+  const accessibleName = accessibleNameAttributes(
+    {
+      ariaLabel: config.ariaLabel,
+      ariaLabelledBy: config.ariaLabelledBy,
+      fallbackLabelId: labelId(config.id),
+    },
+    h,
+  )
 
-  const resolveValueText = (): ReadonlyArray<Attribute<Message>> => {
+  const resolveValueTextAttributes = (): ReadonlyArray<Attribute<Message>> => {
     if (config.valueText === undefined) {
       return []
-    }
-    if (typeof config.valueText === 'string') {
+    } else if (typeof config.valueText === 'string') {
       return [h.AriaValuetext(config.valueText)]
+    } else {
+      return [h.AriaValuetext(config.valueText(clampedValue, max))]
     }
-    return [h.AriaValuetext(config.valueText(clampedValue, max))]
   }
 
-  const maybeValueText = resolveValueText()
-
-  const accessibleAttributes: Array<Attribute<Message>> = []
-
-  if ('ariaLabel' in config && config.ariaLabel !== undefined) {
-    accessibleAttributes.push(h.AriaLabel(config.ariaLabel))
-  }
-
-  if ('ariaLabelledBy' in config && config.ariaLabelledBy !== undefined) {
-    accessibleAttributes.push(h.AriaLabelledBy(config.ariaLabelledBy))
-  }
-
-  if (accessibleAttributes.length === 0) {
-    accessibleAttributes.push(h.AriaLabelledBy(labelId(config.id)))
-  }
-
-  const thresholdAttributes: Array<Attribute<Message>> = []
-
-  if (config.low !== undefined) {
-    thresholdAttributes.push(h.DataAttribute('low', String(config.low)))
-  }
-
-  if (config.high !== undefined) {
-    thresholdAttributes.push(h.DataAttribute('high', String(config.high)))
-  }
-
-  if (config.optimum !== undefined) {
-    thresholdAttributes.push(h.DataAttribute('optimum', String(config.optimum)))
-  }
+  const thresholdAttributes = [
+    ...(config.low !== undefined
+      ? [h.DataAttribute('low', String(config.low))]
+      : []),
+    ...(config.high !== undefined
+      ? [h.DataAttribute('high', String(config.high))]
+      : []),
+    ...(config.optimum !== undefined
+      ? [h.DataAttribute('optimum', String(config.optimum))]
+      : []),
+  ]
 
   const meterAttributes: ReadonlyArray<Attribute<Message>> = [
     h.Id(config.id),
@@ -111,8 +81,8 @@ export const view = <Message>(
     h.AriaValuemin(min),
     h.AriaValuemax(max),
     h.AriaValuenow(clampedValue),
-    ...maybeValueText,
-    ...accessibleAttributes,
+    ...resolveValueTextAttributes(),
+    ...accessibleName,
     h.DataAttribute('value', String(clampedValue)),
     h.DataAttribute('min', String(min)),
     h.DataAttribute('max', String(max)),
@@ -120,19 +90,19 @@ export const view = <Message>(
   ]
 
   const fillAttributes: ReadonlyArray<Attribute<Message>> = [
-    h.Style({ width: percentString(fraction) }),
+    h.Style({ width: percentageFromFraction(fraction) }),
     h.DataAttribute('value', String(clampedValue)),
+    h.DataAttribute('min', String(min)),
     h.DataAttribute('max', String(max)),
-    h.DataAttribute('state', fraction >= 1 ? 'complete' : 'loading'),
   ]
 
-  const labelAttributes: ReadonlyArray<Attribute<Message>> = [
+  const visibleLabelAttributes: ReadonlyArray<Attribute<Message>> = [
     h.Id(labelId(config.id)),
   ]
 
   return config.toView({
     meter: meterAttributes,
-    label: labelAttributes,
+    label: visibleLabelAttributes,
     fill: fillAttributes,
   })
 }

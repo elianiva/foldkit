@@ -131,6 +131,8 @@ export const STATIC_ROUTES: ReadonlyArray<AppRoute> = [
   AppRoute.UiRadioGroup(),
   AppRoute.UiSelect(),
   AppRoute.UiSlider(),
+  AppRoute.UiMeter(),
+  AppRoute.UiProgress(),
   AppRoute.UiSwitch(),
   AppRoute.UiButton(),
   AppRoute.UiCalendar(),

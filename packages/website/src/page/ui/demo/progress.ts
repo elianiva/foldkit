@@ -2,7 +2,7 @@ import type { HtmlBuilder } from 'foldkit/html'
 
 import { Progress } from '@foldkit/ui'
 
-import { Message } from './message'
+import { Message } from '../message'
 
 // DEMO CONTENT
 
@@ -20,7 +20,6 @@ export const basicDemo = (h: HtmlBuilder<Message>) => {
         id: 'progress-basic-demo',
         value: 42,
         max: 100,
-        ariaLabel: 'Upload',
         valueText: '42 percent',
         toView: attributes =>
           h.div(
@@ -69,7 +68,6 @@ export const indeterminateDemo = (h: HtmlBuilder<Message>) => {
     Progress.view(
       {
         id: 'progress-indeterminate-demo',
-        ariaLabel: 'Loading',
         valueText: 'Loading',
         toView: attributes =>
           h.div(
